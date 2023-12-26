@@ -16,6 +16,11 @@ class thread_pool {
     larva::threadsafe_queue<larva::f_wrapper> _work_queue {};
     std::vector<std::thread> _worker_threads {};
 
+    typedef std::queue<larva::f_wrapper> local_queue_type;
+
+    static thread_local
+    std::unique_ptr<local_queue_type> _local_work_queue;
+
 public:
     thread_pool()
     {
@@ -46,21 +51,38 @@ public:
         std::packaged_task<result_type()> task(std::move(f));
         std::future<result_type> res(task.get_future());
         
-        this->_work_queue.push(std::move(task));
+        /* If Local pending task is initialized, we push task on it, otherwise,
+         * we push on the shared queue. */
+        if (this->_local_work_queue) {
+            this->_local_work_queue->push(std::move(task));
+        } else {
+            this->_work_queue.push(std::move(task));
+        }
 
         return res;
+    }
+
+    void run_pending_task()
+    {
+        larva::f_wrapper task;
+        if (this->_local_work_queue && !this->_local_work_queue->empty()) {
+            task = std::move(this->_local_work_queue->front());
+            this->_local_work_queue->pop();
+            task();
+        } else if (this->_work_queue.try_pop(task)) {
+            task();
+        } else {
+            std::this_thread::yield();
+        }  
     }
 
 private:
     void worker_thread()
     {
+        this->_local_work_queue.reset(new local_queue_type);
+
         while (!this->_done) {
-            larva::f_wrapper task;
-            if (this->_work_queue.try_pop(task)) {
-                task();
-            } else {
-                std::this_thread::yield();
-            }
+            this->run_pending_task();
         }
     }   
 };

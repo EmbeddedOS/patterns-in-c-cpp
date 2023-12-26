@@ -220,3 +220,103 @@ private:
 - Note that you have to use `std::move()` when pushing the task onto the queue, because the `std::packaged-task<>` isn't **copyable**. The queue now store `f_wrapper` objects rather than `std::function<void()>` objects in order to handle this.
 
 - This works well for simple cases, where the tasks are independent. But it's not so good for situations where the tasks depend on other tasks also submitted to the thread pool.
+
+### 1.4. Avoiding contention on the work queue
+
+- Every time a thread calls `submit()` on a particular instance of the thread pool, it has to push a new item onto the single shared work queue. Likewise, the worker threads are continually popping items off the queue in order to run the tasks. This means that as the number of processors increases, there's increasing contention on the queue. **This can be a real performance drain;** even if you use a lock-free queue so there's no explicit waiting, *cache ping-pong* can be a substantial time sink.
+
+- One way to avoid *cache ping-pong* is to **use a separate work queue per thread**. Each thread then posts new items to its own queue and takes work from the global work queue only if there's no work on its own individual queue.
+
+- We use `thread_local` variable to ensure that each thread has its own work queue, as well as the global.
+
+```cpp
+namespace larva {
+
+typedef std::function<void()> task_t;
+
+class thread_pool {
+    std::atomic_bool _done {false};
+    larva::threadsafe_queue<larva::f_wrapper> _work_queue {};
+    std::vector<std::thread> _worker_threads {};
+
+    typedef std::queue<larva::f_wrapper> local_queue_type;
+
+    static thread_local
+    std::unique_ptr<local_queue_type> _local_work_queue;
+
+public:
+    thread_pool()
+    {
+        unsigned const thread_number = std::thread::hardware_concurrency();
+        try {
+            for (unsigned i = 0; i < thread_number; ++i)
+            {
+                this->_worker_threads.push_back(
+                            std::thread{&thread_pool::worker_thread, this});
+            }
+        } catch (...) {
+            this->_done = true;
+            throw;
+        }
+    }
+
+    ~thread_pool()
+    {
+        this->_done = true;
+    }
+
+
+    template <typename FunctionType>
+    std::future<typename  std::result_of<FunctionType()>::type>
+    submit(FunctionType f)
+    {
+        typedef typename std::result_of<FunctionType()>::type result_type;
+        std::packaged_task<result_type()> task(std::move(f));
+        std::future<result_type> res(task.get_future());
+        
+        /* If Local pending task is initialized, we push task on it, otherwise,
+         * we push on the shared queue. */
+        if (this->_local_work_queue) {
+            this->_local_work_queue->push(std::move(task));
+        } else {
+            this->_work_queue.push(std::move(task));
+        }
+
+        return res;
+    }
+
+    void run_pending_task()
+    {
+        larva::f_wrapper task;
+        if (this->_local_work_queue && !this->_local_work_queue->empty()) {
+            task = std::move(this->_local_work_queue->front());
+            this->_local_work_queue->pop();
+            task();
+        } else if (this->_work_queue.try_pop(task)) {
+            task();
+        } else {
+            std::this_thread::yield();
+        }  
+    }
+
+private:
+    void worker_thread()
+    {
+        this->_local_work_queue.reset(new local_queue_type);
+
+        while (!this->_done) {
+            this->run_pending_task();
+        }
+    }   
+};
+
+}
+```
+
+- We've used a `std::unique_ptr<>` to hold the thread-local work queue because we don't want other threads that aren't part of your thread pool to have one; this is initialized in the `worker_thread()` function before the processing loop. The destructor of `std::unique_ptr<>` will ensure that the work queue is destroyed when the thread exits.
+
+- `submit()` then checks to see if the current thread has a work queue. If it does, it's a pool thread, and you can put the task on the local queue; otherwise you need to put the task on the pool queues.
+
+- This works fine for reducing contention, but when the distribution of work is uneven, it can easily result in one thread having a lot of work in its queue while the others have no work to do. **This defeats the purpose of using a thread pool**.
+
+- Thankfully, there is a solution to this: allow the threads to `steal` work from each other's queues if there's no work in their queue and no work in the global queue.
