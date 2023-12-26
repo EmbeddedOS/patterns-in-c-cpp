@@ -15,7 +15,7 @@ namespace larva {
     public:
         T pop()
         {
-            std::lock_guard<std::mutex> lock(this->_mutex);
+            std::unique_lock<std::mutex> lock(this->_mutex);
 
             /* Unlock the lock guard and wait until the queue is not empty. */
             this->_cond.wait(lock, [this]() -> bool 
@@ -28,9 +28,21 @@ namespace larva {
             return item;         
         }
 
+        bool try_pop(T &item)
+        {
+            std::unique_lock<std::mutex> lock(this->_mutex);
+            if (this->_queue.empty()) {
+                return false;
+            }
+
+            item = this->_queue.front();
+            this->_queue.pop();
+            return true;
+        }
+
         void push(T item)
         {
-            std::lock_guard<std::mutex> lock(this->_mutex);
+            std::unique_lock<std::mutex> lock(this->_mutex);
             this->_queue.push(item);
             this->_cond.notify_one();
         }
