@@ -13,6 +13,8 @@ project(ThreadPool
 
 set(CMAKE_CXX_STANDARD                  17)
 set(CMAKE_CXX_STANDARD_REQUIRED         ON)
+SET(PTHREAD_FLAG                        "-pthread")
+SET(CMAKE_CXX_FLAGS                     "${CMAKE_CXX_FLAGS} ${PTHREAD_FLAG}")
 
 set(THREAD_POOL_LIB thread_pool)
 
