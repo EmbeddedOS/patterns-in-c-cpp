@@ -35,7 +35,7 @@ namespace larva {
                 return false;
             }
 
-            item = this->_queue.front();
+            item = std::move(this->_queue.front());
             this->_queue.pop();
             return true;
         }
@@ -43,7 +43,7 @@ namespace larva {
         void push(T item)
         {
             std::unique_lock<std::mutex> lock(this->_mutex);
-            this->_queue.push(item);
+            this->_queue.push(std::move(item));
             this->_cond.notify_one();
         }
     };

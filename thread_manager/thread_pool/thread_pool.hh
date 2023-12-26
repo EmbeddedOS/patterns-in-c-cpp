@@ -5,6 +5,7 @@
 #include <thread>
 
 #include <threadsafe_container/queue.hh>
+#include <f_wrapper.hh>
 
 namespace larva {
 
@@ -12,7 +13,7 @@ typedef std::function<void()> task_t;
 
 class thread_pool {
     std::atomic_bool _done {false};
-    larva::threadsafe_queue<larva::task_t> _work_queue {};
+    larva::threadsafe_queue<larva::f_wrapper> _work_queue {};
     std::vector<std::thread> _worker_threads {};
 
 public:
@@ -31,22 +32,30 @@ public:
         }
     }
 
-    ~thread_pool() {
+    ~thread_pool()
+    {
         this->_done = true;
     }
 
 
     template <typename FunctionType>
-    void submit(FunctionType f)
+    std::future<typename  std::result_of<FunctionType()>::type>
+    submit(FunctionType f)
     {
-        this->_work_queue.push(larva::task_t(f));
+        typedef typename std::result_of<FunctionType()>::type result_type;
+        std::packaged_task<result_type()> task(std::move(f));
+        std::future<result_type> res(task.get_future());
+        
+        this->_work_queue.push(std::move(task));
+
+        return res;
     }
 
 private:
     void worker_thread()
     {
         while (!this->_done) {
-            larva::task_t task;
+            larva::f_wrapper task;
             if (this->_work_queue.try_pop(task)) {
                 task();
             } else {

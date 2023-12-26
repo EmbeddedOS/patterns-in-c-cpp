@@ -20,3 +20,203 @@
 
 - At its simplest, a thread pool is a fixed number of **worker threads** (typically the same number as the value returned by `std::thread::hardware_concurrency()`) that process work.
 - Each worker thread takes work off the queue, runs the specified task, and then goes back to the queue for more work. In the simplest case there's no way to wait for the task to complete.
+
+```cpp
+#pragma once
+#include <atomic>
+#include <functional>
+#include <vector>
+#include <thread>
+
+#include <threadsafe_container/queue.hh>
+
+namespace larva {
+
+typedef std::function<void()> task_t;
+
+class thread_pool {
+    std::atomic_bool _done {false};
+    larva::threadsafe_queue<larva::task_t> _work_queue {};
+    std::vector<std::thread> _worker_threads {};
+
+public:
+    thread_pool()
+    {
+        unsigned const thread_number = std::thread::hardware_concurrency();
+        try {
+            for (unsigned i = 0; i < thread_number; ++i)
+            {
+                this->_worker_threads.push_back(
+                            std::thread{&thread_pool::worker_thread, this});
+            }
+        } catch (...) {
+            this->_done = true;
+            throw;
+        }
+    }
+
+    ~thread_pool() {
+        this->_done = true;
+    }
+
+
+    template <typename FunctionType>
+    void submit(FunctionType f)
+    {
+        this->_work_queue.push(larva::task_t(f));
+    }
+
+private:
+    void worker_thread()
+    {
+        while (!this->_done) {
+            larva::task_t task;
+            if (this->_work_queue.try_pop(task)) {
+                task();
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    }   
+};
+
+}
+```
+
+- The implementation has a vector of worker threads and uses one of the thread safe queues to manage the queue of work.
+- Starting a thread can fail by throwing an exception, so you need to ensure that any threads you've already started are stopped and cleaned up nicely in this case. This is achieved with a *try-catch* block.
+
+### 1.2. Waiting for tasks submitted to a thread pool
+
+- With thread pools, you'd need to wait for the tasks submitted to the thread pool to complete, rather than the worker threads themselves. This is similar to the way that the `std::async` waited for the futures.
+- This adds complexity to the code; it would be better if you could wait for the tasks directly. By moving that complexity into the thread pool itself, you can wait for the tasks directly. You can have the `submit()` function return a task handle of some description that you can then use to wait for the task complete. This task handle would wrap the use of condition variables or futures, simplifying the code that uses the thread pool.
+
+- A special case of having to wait for the spawned task to finish occurs when the main thread needs a result computed by the task.
+
+- Because the `std::packaged_task<>` instances are not **copyable**, just **movable**, we can no longer use `std::function<>` for the queue entries, because `std::function<>` requires that the stored function objects are copy-constructible. Instead, we must use a custom function wrapper that can handle move-only types. This is a simple type-erasure class with a function call operator. We only need to handle functions that take no parameters and return void, so this is a straightforward virtual call in the implementation.
+
+```cpp
+#pragma once
+
+#include <future>
+#include <memory>
+
+namespace larva {
+
+    class f_wrapper {
+        struct impl_base {
+            virtual void call() = 0;
+            virtual ~impl_base() {}
+        };
+
+        template <typename F>
+        struct impl: impl_base {
+            F _f;
+            impl(F&& f): _f {std::move(f)} {}
+            void call() { this->_f(); }
+        };
+
+        std::unique_ptr<impl_base> _impl {nullptr};
+
+    public:
+        template <typename F>
+        f_wrapper(F&& f): _impl {std::make_unique<impl<F>>(std::move(f))} {}
+        f_wrapper(f_wrapper&& other): _impl {std::move(other._impl)} {}
+        f_wrapper() = default;
+
+        void operator() ()
+        {
+            this->_impl->call();
+        }
+
+        f_wrapper& operator=(f_wrapper&& other)
+        {
+            this->_impl = std::move(other._impl);
+        }
+
+        f_wrapper(const f_wrapper&) = delete;
+        f_wrapper(f_wrapper&) = delete;
+        f_wrapper& operator=(const f_wrapper&) = delete;
+    };
+
+}
+```
+
+```cpp
+#pragma once
+#include <atomic>
+#include <functional>
+#include <vector>
+#include <thread>
+
+#include <threadsafe_container/queue.hh>
+#include <f_wrapper.hh>
+
+namespace larva {
+
+typedef std::function<void()> task_t;
+
+class thread_pool {
+    std::atomic_bool _done {false};
+    larva::threadsafe_queue<larva::f_wrapper> _work_queue {};
+    std::vector<std::thread> _worker_threads {};
+
+public:
+    thread_pool()
+    {
+        unsigned const thread_number = std::thread::hardware_concurrency();
+        try {
+            for (unsigned i = 0; i < thread_number; ++i)
+            {
+                this->_worker_threads.push_back(
+                            std::thread{&thread_pool::worker_thread, this});
+            }
+        } catch (...) {
+            this->_done = true;
+            throw;
+        }
+    }
+
+    ~thread_pool()
+    {
+        this->_done = true;
+    }
+
+
+    template <typename FunctionType>
+    std::future<typename std::result_of<FunctionType()>::type>
+    submit(FunctionType f)
+    {
+        typedef typename std::result_of<FunctionType()>::type result_type;
+        std::packaged_task<result_type()> task(std::move(f));
+        std::future<result_type> res(task.get_future());
+        
+        this->_work_queue.push(std::move(task));
+
+        return res;
+    }
+
+private:
+    void worker_thread()
+    {
+        while (!this->_done) {
+            larva::f_wrapper task;
+            if (this->_work_queue.try_pop(task)) {
+                task();
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    }   
+};
+
+}
+```
+
+- First, the modified `submit()` function returns a `std::future<>` to hold the return value of the task and allow the caller to wait for the task complete. This requires that you know the return type of the supplied function `f`, which is where `std::result_of<>` comes in: `std::result_of<FunctionType()>::type` is the type of the result of invoking an instance of type `FunctionType` (such as `f`) with no arguments. You use the same `std::result<>` expression for the `result_type typedef` inside function.
+
+- We then wrap the function `f` in a `std::packaged-task<result_type()>`, because `f` is a function or callable object that takes no parameters and return an instance of type `result_type`, as we deduced. We can now get your future from `std::packaged-task<>` before pushing the task onto the queue and returning the future.
+
+- Note that you have to use `std::move()` when pushing the task onto the queue, because the `std::packaged-task<>` isn't **copyable**. The queue now store `f_wrapper` objects rather than `std::function<void()>` objects in order to handle this.
+
+- This works well for simple cases, where the tasks are independent. But it's not so good for situations where the tasks depend on other tasks also submitted to the thread pool.
