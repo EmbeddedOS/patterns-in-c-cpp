@@ -320,3 +320,184 @@ private:
 - This works fine for reducing contention, but when the distribution of work is uneven, it can easily result in one thread having a lot of work in its queue while the others have no work to do. **This defeats the purpose of using a thread pool**.
 
 - Thankfully, there is a solution to this: allow the threads to `steal` work from each other's queues if there's no work in their queue and no work in the global queue.
+
+### 1.5. Work stealing
+
+- In order to allow a thread with no work to do to take work from another thread with a full queue, the queue must be accessible to the thread doing the stealing from `run_pending_tasks()`. This requires that each thread register its queue with the thread pool or be given one by the thread pool. Also, you must ensure that the data in the work queue is suitably synchronized and protected so that your invariants are protected.
+
+- It's possible to write a lock-free queue that allows the owner thread to push and pop at one end while other threads can steal entries from the other.
+
+```cpp
+namespace larva {
+    typedef f_wrapper data_type;
+
+    class stealing_queue {
+        std::deque<data_type> _queue;
+        mutable std::mutex _mutex; /* Change mutex in const method. */
+    
+    public:
+        stealing_queue() = default;
+        stealing_queue(const stealing_queue& other) = delete;
+        stealing_queue& operator=(const stealing_queue& other) = delete;
+
+        void push(data_type data) {
+            std::lock_guard<std::mutex> lock(this->_mutex);
+            this->_queue.push_front(std::move(data));
+        }
+
+        bool empty() const {
+            std::lock_guard<std::mutex> lock(this->_mutex);
+            return this->_queue.empty();
+        }
+
+        bool try_pop(data_type& res) {
+            std::lock_guard<std::mutex> lock(this->_mutex);
+            if (this->_queue.empty()) {
+                return false;
+            }
+
+            res = std::move(this->_queue.front());
+            this->_queue.pop_front();
+            return true;
+        }
+
+        bool try_steal(data_type& res) {
+            std::lock_guard<std::mutex> lock(this->_mutex);
+            if (this->_queue.empty()) {
+                return false;
+            }
+
+            res = std::move(this->_queue.back());
+            this->_queue.pop_back();
+            return true;
+        }
+    };
+}
+```
+
+- This queue is a simple wrapper around a `std::deque<f_wrapper>` that protects all accesses with a mutex lock. Both `push()` and `try_pop()` work on the front of the queue, while `try_steal()` work on the back.
+
+- This means that this *queue* is a *last-in-first-out* stack for its own thread; the task most recently pushed on is the first one off again. This can help improve performance from a cache perspective, because the data related to a task pushed on the queue previously.
+
+- `try_steal()` takes items from the opposite end of the queue to `try_pop()` in order to minimize contention;
+
+```cpp
+namespace larva {
+
+    class stealing_thread_pool {
+        std::atomic_bool _done {false};
+        larva::threadsafe_queue<larva::f_wrapper> _work_queue {};
+        std::vector<std::thread> _worker_threads {};
+        larva::join_threads _joiner;
+        std::vector<std::unique_ptr<larva::stealing_queue>> _queues {};
+        static thread_local larva::stealing_queue *_local_work_queue;
+        static thread_local unsigned _index;
+
+    public:
+        stealing_thread_pool(): _joiner {this->_worker_threads}, _done {false}
+        {
+            unsigned const thread_number = std::thread::hardware_concurrency();
+            try {
+                for (unsigned i = 0; i < thread_number; ++i)
+                {
+                    this->_queues.push_back(
+                        std::make_unique<larva::stealing_queue>());
+
+                    this->_worker_threads.push_back(
+                        std::thread{&stealing_thread_pool::worker_thread,
+                                    this, i});
+                }
+            } catch (...) {
+                this->_done = true;
+                throw;
+            }
+        }
+
+        ~stealing_thread_pool()
+        {
+            this->_done = true;
+        }
+
+
+        template <typename FunctionType>
+        std::future<typename  std::result_of<FunctionType()>::type>
+        submit(FunctionType f)
+        {
+            typedef typename std::result_of<FunctionType()>::type result_type;
+            std::packaged_task<result_type()> task(std::move(f));
+            std::future<result_type> res(task.get_future());
+            
+            /* If Local pending task is initialized, we push task on it,
+            *  otherwise, we push on the shared queue. */
+            if (this->_local_work_queue) {
+                this->_local_work_queue->push(std::move(task));
+            } else {
+                this->_work_queue.push(std::move(task));
+            }
+
+            return res;
+        }
+
+        void run_pending_task()
+        {
+            larva::f_wrapper task;
+            if (this->pop_task_from_local_queue(task)
+                || this->pop_task_from_pool_queue(task)
+                || this->pop_task_from_other_thread_queue(task))
+            {
+                    task();
+            } else {
+                std::this_thread::yield();
+            }
+
+        }
+
+    private:
+        void worker_thread(unsigned index)
+        {
+            this->_index = index;
+            this->_local_work_queue = this->_queues[this->_index].get();
+
+            while (!this->_done) {
+                this->run_pending_task();
+            }
+        }
+
+        bool pop_task_from_pool_queue(f_wrapper &task)
+        {
+            return this->_work_queue.try_pop(task);
+        }
+
+        bool pop_task_from_local_queue(f_wrapper &task)
+        {
+            return this->_local_work_queue
+                    && this->_local_work_queue->try_pop(task);
+        }
+
+        bool pop_task_from_other_thread_queue(f_wrapper &task)
+        {
+            for (unsigned i = 0; i < this->_queues.size(); i++) {
+                /* Current thread will try to steal task from next thread.
+                 * We do that to avoid every threads steal from first thread. */
+                unsigned index_of_other = (this->_index + i + 1)
+                                            % this->_queues.size();
+                if (this->_queues[index_of_other]->try_steal(task))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    };
+
+}
+```
+
+- This code is similar with `thread_pool`. The first difference is that each thread has a `stealing_queue` rather than a plain `std::queue<>`. When each thread is created, rather than allocating its own work queue, the pool constructor allocates one, which is then stored in the list of work queues for this pool. The index of the queue in the list is then passed in to the thread function and used to retrieve the pointer to the queue. This means that the thread pool can access the queue when trying to steal a task for a thread that has no work to do.
+
+- `run_pending_task()` will now try to take task from its thread's own queue, take a task from the pool queue, or take a task from the queue of another thread.
+
+- `pop_task_from_other_thread_queue()` iterates through the queues belonging to all the threads in the pool, trying to steak a task from each in turn. In order to avoid every thread trying to steal from the first thread in the lest, each thread starts at the next thread in the list by offsetting the index of the queue to check by its own index.
+
+- Now we have a working thread pool that's good for many potential uses. One aspect that hasn't been explored is the idea of dynamically resizing the thread pool to ensure that there's optimal CPU usage even when threads are blocked waiting for something such as I/O or a mutex lock.

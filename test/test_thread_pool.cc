@@ -1,8 +1,9 @@
 #include <iostream>
 #include <thread_pool/thread_pool.hh>
+#include <thread_pool/stealing_thread_pool.hh>
 
 int main() {
-    larva::thread_pool pool;
+    larva::stealing_thread_pool pool;
 
     for (auto i : {1, 2, 3, 4, 5, 6}) {
         std::future<int> ret = pool.submit([i]() -> int {
