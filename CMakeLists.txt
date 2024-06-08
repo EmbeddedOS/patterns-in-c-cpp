@@ -20,7 +20,7 @@ set(THREAD_POOL_LIB thread_pool)
 
 option(COMPILE_TEST "Whether to compile the test" OFF)
 
-add_subdirectory(thread_manager/thread_pool)
+add_subdirectory(cpp/thread_pool/)
 
 if (COMPILE_TEST)
         add_subdirectory(test)

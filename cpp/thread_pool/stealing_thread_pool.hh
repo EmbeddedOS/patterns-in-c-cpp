@@ -4,9 +4,9 @@
 #include <vector>
 #include <thread>
 
-#include <threadsafe_container/stealing_queue.hh>
 #include <threadsafe_container/queue.hh>
-#include <thread_pool/joiner_thread.hh>
+#include <stealing_queue.hh>
+#include <joiner_thread.hh>
 #include <f_wrapper.hh>
 
 namespace larva {
