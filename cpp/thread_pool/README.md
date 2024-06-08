@@ -2,7 +2,11 @@
 
 - We'll look at mechanisms for managing threads and tasks, starting with the automatic management of the number of threads and the division of tasks between them.
 
-## 1. Thread pools
+## 1. What is this?
+
+- A thread-pool implementation based on cpp modern.
+
+## 2. Thread pools
 
 - In many companies, employees who would normally spend their time in the office are occasionally required to visit clients or suppliers or to attend a trade show or conference. Although these trips might be necessary, and on any given day there might be several people making this trip, it may well be months or even yeats between these trips for any particular employee.
 - Because it would therefore be rather expensive and impractical for each employee to have a company car, companies often offer a **car pool** instead;
@@ -16,7 +20,7 @@
 
 - There are several key design issues when building a thread pool, such as how many threads to use, the most efficient way to allocate tasks to threads, and wether or not you can wait for a task to complete.
 
-### 1.1. The simplest possible thread pool
+### 2.2. The simplest possible thread pool
 
 - At its simplest, a thread pool is a fixed number of **worker threads** (typically the same number as the value returned by `std::thread::hardware_concurrency()`) that process work.
 - Each worker thread takes work off the queue, runs the specified task, and then goes back to the queue for more work. In the simplest case there's no way to wait for the task to complete.
@@ -86,7 +90,7 @@ private:
 - The implementation has a vector of worker threads and uses one of the thread safe queues to manage the queue of work.
 - Starting a thread can fail by throwing an exception, so you need to ensure that any threads you've already started are stopped and cleaned up nicely in this case. This is achieved with a *try-catch* block.
 
-### 1.2. Waiting for tasks submitted to a thread pool
+### 2.2. Waiting for tasks submitted to a thread pool
 
 - With thread pools, you'd need to wait for the tasks submitted to the thread pool to complete, rather than the worker threads themselves. This is similar to the way that the `std::async` waited for the futures.
 - This adds complexity to the code; it would be better if you could wait for the tasks directly. By moving that complexity into the thread pool itself, you can wait for the tasks directly. You can have the `submit()` function return a task handle of some description that you can then use to wait for the task complete. This task handle would wrap the use of condition variables or futures, simplifying the code that uses the thread pool.
@@ -221,7 +225,7 @@ private:
 
 - This works well for simple cases, where the tasks are independent. But it's not so good for situations where the tasks depend on other tasks also submitted to the thread pool.
 
-### 1.4. Avoiding contention on the work queue
+### 2.4. Avoiding contention on the work queue
 
 - Every time a thread calls `submit()` on a particular instance of the thread pool, it has to push a new item onto the single shared work queue. Likewise, the worker threads are continually popping items off the queue in order to run the tasks. This means that as the number of processors increases, there's increasing contention on the queue. **This can be a real performance drain;** even if you use a lock-free queue so there's no explicit waiting, *cache ping-pong* can be a substantial time sink.
 
@@ -321,7 +325,7 @@ private:
 
 - Thankfully, there is a solution to this: allow the threads to `steal` work from each other's queues if there's no work in their queue and no work in the global queue.
 
-### 1.5. Work stealing
+### 2.5. Work stealing
 
 - In order to allow a thread with no work to do to take work from another thread with a full queue, the queue must be accessible to the thread doing the stealing from `run_pending_tasks()`. This requires that each thread register its queue with the thread pool or be given one by the thread pool. Also, you must ensure that the data in the work queue is suitably synchronized and protected so that your invariants are protected.
 
