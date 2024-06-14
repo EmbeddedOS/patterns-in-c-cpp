@@ -20,3 +20,16 @@
   - 11. **Semaphore Pattern**: Outlines a pattern of signaling between interrupt handlers and application level threads for thread-aware synchronization.
   - 12. **Mutex Pattern**: Prevents starvation by means of priority inheritance and is used for mutually exclusive access to a resource.
   - 13. **Conditional Pattern**: Signals and wakes up one or more threads from another thread or interrupt handler to check for complex conditions in response to an asynchronous event.
+
+- Who this training is for:
+  - 1. Embedded software Architects: even if you have been coding for many years, you may still find ideas in this content on how to do things better.
+  - 2. Beginner Embedded Programmer.
+  - 3. Embedded Manager.
+
+- When to introduce these patterns:
+  - 1. Refactoring existing code: when you already have code and you want to improve its structure.
+  - 2. Starting new project: make things right from the start so that you do not need to refactor later.
+
+- Where these patterns are most useful:
+  - 1. **Structural templates**: patterns are used like reinforcement bars in your code to keep the expectations clear and the code strong.
+  - 2. **More valuable if used everywhere**: a pattern you only use once is not as valuable as a pattern apply across all levels of software abstractions.
