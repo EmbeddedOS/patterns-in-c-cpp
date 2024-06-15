@@ -52,3 +52,19 @@
   - 3. **Abstract interfaces**: object pattern is key component of abstract interfaces.
   - 4. **Multi-threaded design**: object pattern is essential for multi-threaded design because thread synchronization is about `locking data - not code` and objects are essential for grouping data together so that we can have one clear lock for a group of variables we need to synchronize access to.
   - 5. **Opaque handles**: a pointer to a data structure can be exposed to the outside without exposing the data structure itself. This allows for efficient way of implementing opaque handles with custom internal allocation. Object pattern is needed because all data belonging to a handle must be separate from all other handlers.
+
+#### 2.1. Implementation
+
+##### 2.1.1. Declaration
+
+- In header file:
+
+```C
+struct my_object {
+    uint32_t variables;
+    uint32_t flags;
+}
+
+int my_object_init(struct my_object *self);
+int my_object_deinit(struct my_object *self);
+```
