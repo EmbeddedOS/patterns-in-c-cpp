@@ -33,3 +33,22 @@
 - Where these patterns are most useful:
   - 1. **Structural templates**: patterns are used like reinforcement bars in your code to keep the expectations clear and the code strong.
   - 2. **More valuable if used everywhere**: a pattern you only use once is not as valuable as a pattern apply across all levels of software abstractions.
+
+## II. Creation Pattern
+
+### 2. Object Pattern
+
+- The fastest way to make your code cleanly structured and easy to understand.
+
+- Defining characteristics:
+  - 1. **Context is passed as parameters**: We use `self` parameter to access all data that belongs to the object upon which a function operates.
+  - 2. **Data is never accessed globally**: Any global or singleton data is never accessed directly but instead is accessed through singleton methods.
+  - 3. **Functions do not have static data**: all data is part of the object being operated on. There is no static data in object methods. Data is either part of the object.
+  - 4. **Data flows along call path**: This is an important feature that ensures we have clear boundaries between methods that use particular data. This is incredibly useful for multi-threaded environments because it makes data locking very straightforward when needed.
+
+- Use cases:
+  - 1. **Grouping data**: you should group all variables into structs (objects) and use the object patterns as means of sorting your data hierarchically.
+  - 2. **Singletons**: object pattern is the primary way to implement singletons as well because all data that was previously statically defined inside the singleton implementation can now be placed into a singleton object and all private singleton object methods can be made to operate on that object.
+  - 3. **Abstract interfaces**: object pattern is key component of abstract interfaces.
+  - 4. **Multi-threaded design**: object pattern is essential for multi-threaded design because thread synchronization is about `locking data - not code` and objects are essential for grouping data together so that we can have one clear lock for a group of variables we need to synchronize access to.
+  - 5. **Opaque handles**: a pointer to a data structure can be exposed to the outside without exposing the data structure itself. This allows for efficient way of implementing opaque handles with custom internal allocation. Object pattern is needed because all data belonging to a handle must be separate from all other handlers.
