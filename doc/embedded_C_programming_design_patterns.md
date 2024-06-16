@@ -68,3 +68,19 @@ struct my_object {
 int my_object_init(struct my_object *self);
 int my_object_deinit(struct my_object *self);
 ```
+
+##### 2.1.2. Definition
+
+```C
+int my_object_init(struct my_object *self)
+{ // Init your object.
+    memset(self, 0, sizeof(*self));
+
+    // ...
+}
+
+int my_object_deinit(struct my_object *self)
+{ // Clean up your object.
+
+}
+```
