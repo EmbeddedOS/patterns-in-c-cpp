@@ -84,3 +84,16 @@ int my_object_deinit(struct my_object *self)
 
 }
 ```
+
+##### 2.1.3. Usage
+
+```C
+struct application {
+    struct my_object obj;
+}
+
+int application_init(struct application *self)
+{
+    my_object_init(&self->obj);
+}
+```
