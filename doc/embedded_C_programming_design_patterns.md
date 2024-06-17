@@ -102,3 +102,9 @@ int application_init(struct application *self)
 
 - **Functions `act` on objects**: Each function needs to act on an object pointed to by a `self` argument. Any additional parameters passed to the function are there to modify the behavior being done upon the `self` object. The `self` object is the primary object being changed and also the place where results are accumulated. Any output variables can of course also be passed as arguments and such data is considered `exported` from the object and becomes the responsibility of the caller once the method returns.
 - **Functions are prefixed with object name**: Each function that operates on an object should be prefixed with the type name of that object and also placed in a file with the same name. This is for clean organization and clarify when reading the code.
+
+#### 2.3. Reentrancy
+
+- **No global static data access**: It may not use global and static data - all data that it uses must come from the arguments (i.e. you can not access static data inside the function but the data you pass to the function can of course be static- there are only restrictions in what you get to access inside the function).
+- **No self-modifiable code**: It should not modify its own code (this one is easy to adhere to in modern software). So this is not even applicable to C programming (but is still a rule that must be adhered to in order for a function to be reentrant).
+- **No contamination**: It should not call other non-reentrant functions. The best way to ensure this is to make sure we always pass context to all methods that we call - making sure that we apply object pattern throughout the application.
