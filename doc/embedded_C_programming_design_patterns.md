@@ -108,3 +108,11 @@ int application_init(struct application *self)
 - **No global static data access**: It may not use global and static data - all data that it uses must come from the arguments (i.e. you can not access static data inside the function but the data you pass to the function can of course be static- there are only restrictions in what you get to access inside the function).
 - **No self-modifiable code**: It should not modify its own code (this one is easy to adhere to in modern software). So this is not even applicable to C programming (but is still a rule that must be adhered to in order for a function to be reentrant).
 - **No contamination**: It should not call other non-reentrant functions. The best way to ensure this is to make sure we always pass context to all methods that we call - making sure that we apply object pattern throughout the application.
+
+#### 2.4. Benefits
+
+- **Clear Scope**: Fine grained control over data scope thus minimizing unintentional data manipulation.
+- **Reentrancy**: Ensures functions are re-entrant (no globally manipulated state).
+- **Easy locking**: Simplifies multi-threaded programming because you can easily locate relevant data.
+- **Simplifies testing**: Simplicity of testing because code can be easily compiled in isolation and fed with mock data.
+- **Clear data flow**: Data flow always through the code and not outside of it. This simplifies debugging and makes the code easier to visualize when reading it without even running or testing it.
