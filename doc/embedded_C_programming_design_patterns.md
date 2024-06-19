@@ -116,3 +116,57 @@ int application_init(struct application *self)
 - **Easy locking**: Simplifies multi-threaded programming because you can easily locate relevant data.
 - **Simplifies testing**: Simplicity of testing because code can be easily compiled in isolation and fed with mock data.
 - **Clear data flow**: Data flow always through the code and not outside of it. This simplifies debugging and makes the code easier to visualize when reading it without even running or testing it.
+
+#### 2.5. Drawbacks
+
+- **No ability to hide implementation**: In it's basic form (with struct declared in the header file) private fields are exposed. This add dependencies to the code using our struct. We can only hide implementation by using an extension of this pattern such as the singleton pattern or heap object pattern.
+
+- **Can result in high memory consumption**: Sometimes it is necessary to declare static structures inside a C file - for example when you need to share some data between all instances of a particular object. This warrants occasional mix of of the object pattern with singleton pattern internally where a part of the object implementation is in fact a singleton.
+
+#### 2.6. Best Practice
+
+- **Avoid static**: you should avoid static variables inside functions entirely because they break the object oriented design that the object pattern is designed to solve. They make your functions depend on more data than what is directly available through the `self` pointer.
+- **Use `self`**: unless your object pointer is an interface handle (from which you would then retrieve a `self` pointer) do not use any other names for the variable that designates the pointer to the main context you are operating on. Use `self` because it is compatible with C++ compiler and you remove ambiguity when you always use the same name to refer to `self` (do not use `me`, `dev`, `obj` or some other name) - `self` is a standard that has become widespread even in Python and Rust.
+- **Use consistent naming**: The main struct should have the same name as the header file it is declared. All methods that operate on instances of the struct have the same prefix that is also the same as the struct.
+- **Standardize init/deinit**: There should be two standard functions: `my_object_init()` and `my_object_deinit()` that initialize a new instance and de-initialize it. When user instantiates an object, he should always call `<object>_init()` and this init function must at the very least always clear the memory of the object to zero (this is not done automatically when we are allocating a stack variable!).
+
+#### 2.7. Pitfalls
+
+##### 2.7.1. No `self`
+
+```C
+// Instead of doing this:
+int my_object_do_something(struct my_object *self, int arg)
+{
+    self->some_var = arg;
+}
+
+// You are doing this:
+static struct my_object _self;
+int my_object_do_something(int arg)
+{
+    _self.some_var = arg;
+}
+```
+
+- **Reducing clarity**: It is no longer clear wether this method operates on data aggregated under `struct my_object` or not. You lose this clarify.
+- **More difficult to test**: It is bad for testability because the caller is no longer responsible for the memory and we can not easily create multiple instances or inspect the internals of the object when testing.
+
+##### 2.7.2. Extern variables
+
+- Bad header file:
+
+```C
+extern uint32_t value;
+```
+
+- Bad C file:
+
+```C
+#include <bad_header.h>
+
+void your_method(struct your *self)
+{
+    value = 123;
+}
+```
