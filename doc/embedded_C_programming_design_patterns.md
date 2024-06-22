@@ -662,3 +662,78 @@ my_object_unlock();
 - Network device creation macros that L2 network interfaces.
 - File system objects (ie `fopen()` on Linux and Lower level functions on Zephyr).
 - Network packet creation and protocol buffer packing.
+
+#### 5.3. PROS
+
+- Increase flexibility without having to modify `client` code. Client code maintains stable, generic API towards the implementation.
+- Improved code organization and separation of concerns. Object creation of specific objects is centrally handled - thus easier to maintain.
+- Data driven object creation (ex. device tree). Object layout is defined as data `recipe`.
+- Improved testability. All user code always uses a limited, generic API for querying and creating objects of a specific type.
+- Improved code reuse. Object creation is removed from code meaning that it can easily be implemented differently on different build targets.
+- Improved scalability. Internal object structure can be modified while guaranteeing that no setup code needs to be modified.
+
+#### 5.4. CONS
+
+- Added complexity. Objects are created from parameters - thus there is a `data` API along side of creation API.
+- Lack of flexibility. If creation functions set too tight policy on object creation.
+- Difficultly testing. Slight increase in complexity when macros are used as **factory** methods.
+
+#### 5.5. Implementation
+
+- **Simple factory**: An `object-less` method that returns created object.
+- **Embedded factory**: Useful for embedded applications.
+- **Abstract factory**: A factory with a generic interface and multiple implementations.
+- **Prototype factory**: A factory that does a deep copy of existing objects (prototypes).
+- **Pooled factory**: An optimization technique where objects are kept in a `free` and `in-use` queue.
+
+##### 5.6. Simple factory
+
+- This is a public header:
+
+```C
+enum shape_type {
+    SHAPE_CIRCLE,
+    SHAPE_SQUARE
+};
+
+/* Abstract API for the shade. */
+struct shape_api {
+    void (*draw)(shape_t shade);
+};
+
+typedef struct shape_api **shape_t;
+
+struct shape {
+    const struct shape_api * const api;
+};
+
+/* We make only one API for avoid duplicating create many APIs for each shape
+ * type. For example we have up to a thousand of shade type.
+ */
+shape_t shape_create(enum shape_type type);
+
+/* Virtual API with function pointer like an abstract object.
+ */
+void shape_draw(shape_t shape);
+```
+
+- In the C file implementation:
+
+```C
+#include <shape.h>
+
+/* shape circle and shape rectangle structures inherit struct shape with `draw`
+ * method. */
+/* User don't need to care about the detailed shape types. */
+struct shape_circle {
+    struct shape shape;
+    float radius;
+}
+
+struct shape_rectangle {
+    struct shape shape;
+    float width, hight;
+}
+```
+
+- Continue with circle API page.
