@@ -642,3 +642,15 @@ my_object_unlock();
 - 6. What are common pitfalls?
   - Using singleton for objects that may have multiple instances.
   - No thread-safe.
+
+### 5. Factory Pattern
+
+- This pattern is designed for cases where you need to create object either on startup or pre-defined ways. For example you have your device tree and you need to create your driver structure.
+
+#### 5.1. Defining Characteristics
+
+- What objects are we creating?
+- How is memory allocated?
+- How do we store and pass creation parameters?
+- Decoupled implementation details.
+- What code accesses and uses the factory?
