@@ -170,3 +170,40 @@ void your_method(struct your *self)
     value = 123;
 }
 ```
+
+#### 2.8. Alternatives
+
+- **Opaque Pattern**: This pattern hides implementation of the object completely by taking on the responsibility for allocating and de-allocating instances of the object. The only structure visible to the outside becomes a pointer to an instance without exposing the internals of an object instance outside of its implementation.
+
+- **Singleton Pattern**: This is another variation of the object pattern where a subsystem may want to keep the instance of the object entirely private and only expose a global interface. This pattern is useful for services that are shared across the whole application such as `logging`, `networking stack`, etc.
+
+#### 2.9. Conclusion
+
+- **Universal Pattern**: Apply this pattern as much as possible. If in doubt always make into an `object`.
+- **Fastest way to cleanup code**: Dependencies become clear when you separate code into distinct objects. Use this pattern for refactoring old code.
+
+#### 2.10. Quiz
+
+- 1. Why is it so important to avoid static variables inside functions in C? Specially if the function is an object method?
+  - Because the static variables make functions become non-reentrancy: Same arguments but can make different results -> hard for testing.
+  - In multi-threaded environment, using globals variables need protection mechanisms -> locking -> slow system.
+  - The code is not clear, hard to maintain.
+
+- 2. Why do we avoid functions without parameters? What negative property do these functions possess that make them a very bad design flaw in C source code?
+  - No parameters mean these functions will get input from global data -> that violates object pattern properties.
+
+- 3. Why do we call our pointer to context `self` and why should avoid using other names to refer to `self`?
+  - `self` is a pointer to the context that holds all object's data. The it's methods receive it like a first parameter.
+  - `self` don't conflict with another keyword.
+  - Using `self` name like a standard that hold the object's data. Another languages like python, rust use this name like a standard. `me`, `dev`, `object`, `this`, etc. make confusing or cannot compile with another compiler like C++.
+
+- 4. Why is it sometimes necessary to instantiate object locally in the C file as singletons?
+  - Some kind of object needs only one instance for example: logging, networking stack, etc.
+
+- 5. Why is it a good practice to always name the header and the C file with the same name as the data object they implement?
+  - Easy to manage and search.
+  - The code will be neated and organized, like we separate the object to different namespace.
+
+- 6. Why should you never use `extern` declared variables anywhere in you C code?
+  - `extern` means global objects, that means you expose your data for everyone, that make functions become non-reentrancy, hard to debug who change this variable, etc.
+  - These variables need guarantee to access in multithread environment.
