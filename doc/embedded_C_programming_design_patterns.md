@@ -654,3 +654,11 @@ my_object_unlock();
 - How do we store and pass creation parameters?
 - Decoupled implementation details.
 - What code accesses and uses the factory?
+
+#### 5.2. Use cases for factory pattern
+
+- Instantiation of device driver data such as for example DEVICE_DT_DEFINE macro.
+- Memory pools and buffer pools.
+- Network device creation macros that L2 network interfaces.
+- File system objects (ie `fopen()` on Linux and Lower level functions on Zephyr).
+- Network packet creation and protocol buffer packing.
