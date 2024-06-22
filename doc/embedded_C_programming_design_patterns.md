@@ -440,3 +440,158 @@ DT_INST_FOREACH_STATUS_OKAY(PWM_DEVICE_INIT)
   - Because they don't know the data size.
 - 5. Why is it a good idea to automate the allocation of objects at compile time?
   - We can avoid memory fragment if use heap or smash stack if you use stack.
+
+### 4. Singleton Pattern
+
+#### 4.1. Definition
+
+- **Control over instantiation and use**: single pattern prevents multiple instances from existing in the system at the same time. Sometimes this is also extended to enforce single user at a time as well.
+
+- **Private Construction**: In C this basically means that construction is automatic and is done privately inside the module source code - and only once.
+
+- **Stateless Interface**: Provides a method for getting the instance or implements only stateless methods with a call order agnostic API (methods do not take an instance pointer).
+
+#### 4.2. Use cases
+
+- **Logging**: When you use the `LOG_INF` or `LOG_DBG` macros. Instead of passing an object into these macros, they reference a logger that is created using the `LOG_MODULE_REGISTER` macro at the top of your C file. The same logger singleton instance can be shared across multiple files by using the `LOG_MODULE_DECLARE` macro. By doing this, you are effectively sharing and referencing the global logger instance that was created with the `LOG_MODULE_REGISTER` macro.
+
+- **Configuration**: The Zephyr settings sub-system acts as a singleton, allowing other subsystems to register endpoints that will be called upon loading and saving settings. Callbacks are a common feature of singletons, as the singleton object acts as a `manager` for many other objects that are registered with it.
+
+- **Firmware Subsystems**: Such as power management, device initialization, and networking stacks.
+
+- **Thread scheduler**: This is another example of a singleton. There is only one thread scheduler across the application and no need for multiple scheduler. Threads are `registered` with this scheduler and the scheduler than manages the threads. We let the system instantiate the scheduler.
+
+#### 4.3. Benefits of the singleton pattern
+
+- **Single instance requirement**: The pattern ensures that there is only one instance of the object being created.
+- **Simplifies code**: No requirement to pass the context along code execution path.
+- **Improving performance**: Additional instances do not need to be created, initialized and destroyed. This comes at the expense of having to lock the resource while it is in use and serializing access to it.
+- **Managing shared resources**: Your application components may require a single global point of access with which other subsystems can register their callbacks. Acts like a coordinator.
+
+#### 4.4. Reasons to avoid using singleton
+
+- **UART driver**: you can have multiple UARTs and using a singleton for this reduces flexibility. Instead, use multiple instances with a factory and abstract interface patterns to enable generic access to these instances.
+
+- **Network protocol driver**: You must expect that there will be multiple devices using the same protocol. Therefore, the protocol implementation should be able to be instantiated multiple times and the states of these instances should be separate.
+
+- **Abstract interfaces**: When you need to switch between multiple different implementations behind the same interface. A singleton actively prevents you from being able to implement such flexibility.
+
+- **Concurrent operation**: When you have a shared singleton, it will always be a bottleneck if any operation within it takes time. This may not be a problem when part of your requirements is processing data in sequence, but it can be a bottleneck when many subsystems try to access the singleton from multiple threads.
+
+#### 4.5. Implementation
+
+- Instantiated objects:
+
+```C
+void object_method(struct object *self)
+{
+    // ...
+}
+```
+
+- Singleton objects:
+
+```C
+static struct object _singleton;
+
+void object_method(void)
+{
+    // ...
+}
+```
+
+##### 4.5.1. Safe `on demand` creation
+
+```C
+struct my_object *my_object_get_singleton(void);
+```
+
+```C
+#define DEFINE_SINGLE_TYPE(type)                                \
+    static struct type *_##type##_self;                         \
+    static struct k_spinlock _##type##_lock;                    \
+    struct type *type##_get_singleton(void)                     \
+    {                                                           \
+        static struct type _singleton = {0};                    \
+        k_spinlock_key_t key = k_spin_lock(& _##type##_lock);   \
+        if (!_##type##_self)                                    \
+        {                                                       \
+            _##type##_self = &_singleton;                       \
+            ##type##_init(_##type##_self);                      \
+        }                                                       \
+                                                                \
+        k_spin_unlock(& _##type##_lock, key);                   \
+        return _##type##_self;                                  \
+    }
+```
+
+```C
+DEFINE_SINGLETON_TYPE(my_object);
+```
+
+```C
+void main(void)
+{
+    struct my_object *obj = my_object_get_singleton();
+    my_object_do_something(obj);
+}
+```
+
+#### 4.6. Interface considerations
+
+- **`self` pointer as cue**: to indicate that state and ownership are important.
+- **Stateless API**: If ownership is not important.
+- **Race conditions**: be ware and consider if it is a possibility or not.
+
+- Avoid this: this is stateful API usage pattern.
+
+```C
+my_singleton_object_lock();
+my_singleton_object_do_something();
+my_singleton_object_do_something_else();
+my_singleton_object_unlock();
+```
+
+- You should put `lock()` and `unlock()` to inside or consider this implementation:
+
+```C
+#define DEFINE_SINGLETON_ACQUIRE_RELEASE(type)                  \
+    static struct type *_##type##_in_use;                       \
+    struct type *type##_acquire_singleton(void)                 \
+    {                                                           \
+        k_spinlock_key_t key = k_spin_lock(&_##type##lock);     \
+        if (!_##type##_in_use)                                  \
+        {                                                       \
+            _##type##_in_use = &_##type##_singleton;            \
+            k_spin_unlock(&_##type##_lock, key);                \
+            return _##type##_in_use;                            \
+        }                                                       \
+                                                                \
+        k_spin_unlock(&_##type##_lock, key);                    \
+        return NULL;                                            \
+    }                                                           \
+    void type##_release_singleton(struct type **self)           \
+    {                                                           \
+        k_spinlock_key_t key = k_spin_lock(&_##type##lock);     \
+        if ((self != NULL) && (*self == _##type##_in_use))      \
+        {                                                       \
+            _##type##_in_use = NULL;                            \
+            *self = NULL;                                       \
+        }                                                       \
+                                                                \
+        k_spin_unlock(&_##type##_lock, key);                    \
+    }
+```
+
+```C
+void main(void)
+{
+    struct object *self = object_acquire_singleton();
+    if (self)
+    {
+        object_do_something();
+        object_do_something_else();
+        object_release_singleton(&self);
+    }
+}
+```
