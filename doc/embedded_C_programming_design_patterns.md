@@ -207,3 +207,236 @@ void your_method(struct your *self)
 - 6. Why should you never use `extern` declared variables anywhere in you C code?
   - `extern` means global objects, that means you expose your data for everyone, that make functions become non-reentrancy, hard to debug who change this variable, etc.
   - These variables need guarantee to access in multithread environment.
+
+### 3. Opaque pattern
+
+- Objects with a private definition -> abstraction.
+
+#### 3.1. Defining characteristics
+
+- 1. **Object definition is in the C file**: The struct itself is defined in the C file implementing the object instead of being defined in the header file.
+
+- 2. **Implementation responsible for allocation**: Opaque objects are either statically allocated in the implementation C file or allocated on heap (for example all objects can be allocated at startup). This is a necessary consequence of struct not being visible outside of the C file.
+
+- 3. **Implementation uses object pattern internally**: All functions can still take `self` pointer instance as parameter - but the caller is no longer responsible for allocating the instance. If this feature is not present then we are likely dealing with the singleton pattern.
+
+- 4. **Uses `new` and `delete` idiom**: This is necessary to make a distinction between opaque object and fully defined objects and to make it clear to the caller that the caller must call delete when done with the object.
+
+- 5. **Application (user) only deals with pointers**: since implementation is fully hidden, we only with opaque handles (pointer based) outside of the implementation.
+
+#### 3.2. Use Cases
+
+- **Isolating dependencies**: We want to keep dependencies local to the implementation.
+- **Prevent direct data access by user**: Since the object fields are private to the implementation, they can not be accessed, changed or seen by any other code outside of the implementation.
+
+#### 3.3. Implementation
+
+##### 3.3.1. Public API
+
+- File: `opaque.h` - public interface.
+
+```C
+struct opaque; // Just a declaration.
+
+// init and deinit.
+int opaque_init(struct opaque *self);
+int opaque_deinit(struct opaque *self);
+
+// methods that operate on an opaque.
+void opaque_set_data(struct opaque *self, uint32_t data);
+uint32_t opaque_get_data(struct opaque *self);
+```
+
+##### 3.3.2. Private Implementation
+
+- File: `opaque.c` - private implementation.
+
+```C
+// Actual definition of the struct in private space of the C file.
+struct opaque {
+    uint32_t data;
+};
+
+int opaque_init(struct opaque *self)
+{
+    memset(self, 0, sizeof(*self));
+
+    /* Do other initialization. */
+
+    return 0;
+}
+
+int opaque_deinit(struct opaque *self)
+{
+    /* Free any internal resources and return to know state. */
+    self->data = 0;
+    return 0;
+}
+
+void opaque_set_data(struct opaque *self, uint32_t data)
+{
+    self->data = data;
+}
+
+void opaque_get_data(struct opaque *self)
+{
+    return self->data;
+}
+```
+
+#### 3.4. Allocation schemes
+
+- **Stack allocation**: This scheme uses standard dynamic allocation on the stack using `alloca()` method. `alloca()` is like `malloc()`, except that the allocation happens on the stack and is automatically released when the function returns. This method doesn't suffer from memory fragmentation like `malloc()` below.
+
+- **Dynamic allocation**: here we have to use `malloc()` or an RTOS alternative. If you use this method on resource constrained devices then make sure that you either only allocate during initialization or that you do not use this method at all due to the risk of fragmenting the memory and reaching the point where no new instances can be allocated because of that.
+
+- **Static allocation**: This method uses code generation or a static array. Code generation is preferable but does require that you instantiate your objects using a data representation such as using the device tree which is then parsed during build and from which instances can be created at compile time.
+
+##### 3.4.1. Stack allocation
+
+- The stack allocation scheme use standard `alloca()` function in the C library to allocate the opaque structure on the stack:
+
+```C
+size_t opaque_size(void)
+{
+    return sizeof(struct opaque);
+}
+```
+
+- In User code:
+
+```C
+// Create an opaque type on the stack.
+struct opaque *obj = alloca(opaque_size());
+
+/* Standard init. */
+opaque_init(obj);
+
+/* Operate on the opaque object. */
+opaque_set_data(obj, 123);
+
+/* Done with the object `deinit` it. */
+opaque_deinit(obj);
+```
+
+##### 3.4.2. Dynamic Allocation
+
+- File: `opaque.c` - allocation (dynamic)
+
+```C
+struct opaque *opaque_new()
+{
+    return malloc(sizeof(struct opaque));
+}
+
+void opaque_free(struct opaque **self)
+{
+    /* Free dynamically allocated instance. */
+    free(*self);
+
+    /* Set the passed pointer to NULL! */
+    *self = NULL;
+}
+```
+
+- User code:
+
+```C
+/* Allocate new opaque on the heap. */
+struct opaque *obj = opaque_new();
+__ASSERT(obj, "Memory allocation failed!");
+
+/* Call standard init. */
+opaque_init(obj);
+
+/* Operate on the opaque. */
+opaque_set_data(obj, 456);
+
+/* Deinit the object. */
+opaque_deinit(obj);
+
+/* Discard memory. */
+opaque_free(&obj);
+```
+
+- NOTE: Using `malloc()` a lot can cause fragment memory.
+
+##### 3.4.3. Static Allocation: Zephyr Driver Model
+
+```C
+#define PWM_DEVICE_INIT(index)                                          \
+    static struct pwm_stm32_data pwm_stm32_data_##index;                \
+    static const struct soc_gpio_pinctrl pwm_pins_##index[] =           \
+        ST_STM32_DT_INST_PINCTRL(index, 0);                             \
+                                                                        \
+    static const struct pwm_stm32_config pwm_stm32_config_##index[] = { \
+        .timer = (TIME_TypeDef *)DT_REG_ADDR(                           \
+            DT_PARENT(DT_DRV_INST(index))),                             \
+        .prescaler = DT_INST_PROP(index, st_prescaler),                 \
+        .pclken = DT_INST_CLK(index, timer),                            \
+        .pinctrl = pwm_pins_##index,                                    \
+        .pinctrl_len = ARRAY_SIZE(pwm_pins_##index),                    \
+    };                                                                  \
+                                                                        \
+    DEVICE_DT_INST_DEFINE(index, &pwm_stm32_init, NULL                  \
+        &pwm_stm32_data_##index,                                        \
+        &pwm_stm32_config_##index, POST_KERNEL,                         \
+        CONFIG_KERNEL_INIT_PRIORITY_DEVICE,                             \
+        &pwm_stm32_driver_api);
+
+DT_INST_FOREACH_STATUS_OKAY(PWM_DEVICE_INIT)
+```
+
+#### 3.5. Benefits
+
+- **Hides implementation**: removes the need of the code that uses the object to include dependencies upon which the module depends.
+- **Limits dependencies**: the components and libraries upon the object depends no longer `leak` into the code that uses the object - not even through header files.
+
+#### 3.6. Drawbacks
+
+- **Requires allocation scheme**: This pattern must either use `alloca()`, `malloc()` or implement a custom static allocation scheme for creating new objects - which increases complexity.
+
+- **Prevents data structure**: with object pattern you would normally instantiate each object as part of a clean data hierarchy with `application` struct being the top level enclosing data structure. Since opaque pattern actively prevents instantiation of object on the stack, it also prevents objects from being instantiated inside that data hierarchy.
+
+#### 3.7. Best practices
+
+- **Use stack allocation whenever possible**: This works exactly the same as working with object pattern and is the most lightweight approach.
+- **Use the `new`/`delete` idiom**: If you do use heap, it's good idea to make this clear, by adding the new/delete methods. Always check for failed allocations.
+
+#### 3.8. Common pitfalls
+
+- **Running out of stack space**: If your objects are too big and you allocate them using the stack allocation scheme, then you can easily smash the stack. However, this is not specifically a problem with this pattern, but rather a general danger that is always present when you use stack allocated variables in general.
+
+- **Memory fragmentation**: If you are using the dynamic memory allocation scheme and you frequently allocate/de-allocate large numbers of objects of different sizes then you can end up running out of contiguous blocks of memory and your memory allocation will fail. To avoid this, if you have limited memory avoid completely at runtime. If you really need to use it, use it only during initialization stage and do not re-allocate anything at run time.
+
+#### 3.9. Alternatives
+
+- **Object Pattern**: The object pattern is a clear alternative, with slightly more simplicity - if you are ok with exposing all dependencies to any other code that includes your header.
+
+- **Singleton Pattern**: The singleton pattern is essentially the opaque pattern - but with the main difference that not even the pointer to the context is passed around. Singleton pattern should be mainly limited to implementation of software wide sub-systems and services where instantiation of multiple instances does not make sense at all. Note however that even a singleton object should internally use the object pattern to increase quality of code organization and ease of testing.
+
+- **Abstract API Pattern**: An abstract interface by definition acts as an opaque object. It is a structure that holds only function pointers and each function is then able to retrieve pointer to the implementation specific data using `CONTAINER_OF` macro. Abstract interfaces are useful when we want to generalize over a class of objects - and we then by definition make all of our objects opaque. This pattern is more heavyweight than simple opaque object.
+
+#### 3.10. Conclusion
+
+- **Enhanced alternative to the object pattern**: Very small overhead when using stack allocation.
+- **Size must be made available using member function**: So that we can allocate the memory.
+- **Opaque handles only require type declaration**: It is enough to simply declare a struct without a body in order to be able to use pointers to that struct.
+
+#### 3.11. Quiz
+
+- 1. What are some of the reasons why we would want to hide the data structure of an object outside of its implementation?
+  - We don't want to expose data to customer, easier for them.
+  - Reduce dependencies with another modules.
+  - Some time we don't change the interface but the implementation changes a lot, so we should hide them from user application.
+
+- 2. Why does opaque pattern require a custom allocation scheme?
+  - Because we just provide `struct declaration` to user application, they CANNOT create the object like normal.
+
+- 3. How does using the opaque pattern affect the structure of the data of the application? How does it change the way we structure application data?
+  - The application structure can only hold the pointer to opaque object. User application need to use custom allocation schemes for the opaque property.
+
+- 4. Why is it that allocation must be private when data type is private?
+  - Because they don't know the data size.
+- 5. Why is it a good idea to automate the allocation of objects at compile time?
+  - We can avoid memory fragment if use heap or smash stack if you use stack.
