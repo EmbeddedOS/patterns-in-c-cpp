@@ -605,3 +605,17 @@ void main(void)
 - **Avoid singletons as much as possible**: Avoid using singletons as much as possible and use conventional object oriented design in most of your code. Only use singleton pattern when it is an absolute requirement that there is only one instance of the object in your application at any time.
 - **Use lock**: Use a lock when initializing the instance to avoid race conditions when multiple threads try to create or access the singleton object at the same time (not always necessary).
 - **Hide the instance**: Use a static variable to hold the instance to ensure that the instance is only visible to the object implementation, and is not directly accessible through any other means than the singleton interface.
+
+#### 4.8. Common pitfalls
+
+- **Overuse**: Unthinkingly using the singleton pattern for everything will severely damage the flexibility of your architecture.
+- **Stateful interface**: Since singletons are shared across many services that are part of your application, their API should not rely on call ordering.
+- **Cutting corners**: Thinking that `now we only need one instance, maybe later we can shift to using more instances`. The singleton pattern explicitly states that the only time you should use it is when there is no possibility at all that there will ever be more than one instance of the thing you are creating.
+
+- DO NOT do this:
+
+```C
+my_object_lock();
+my_object_do_something();
+my_object_unlock();
+```
