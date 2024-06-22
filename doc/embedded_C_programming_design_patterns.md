@@ -619,3 +619,10 @@ my_object_lock();
 my_object_do_something();
 my_object_unlock();
 ```
+
+#### 4.9. Alternatives to single pattern
+
+- **Object Pattern**: Where the instance is created by user and then passed to the singleton. This is also a variation of dependency injection pattern.
+- **Factory Pattern**: Where you hide the details of creation of the instance from the user thus simplifying the user code.
+- **Prototype Pattern**: Where you copy an existing object using a virtual constructor (a variation of the virtual API pattern).
+- **Endpoint API Pattern**: Where you make a call to a global function and provide a path such as `path/to/endpoint` and the function then resolves the path to a previously registered callback. This is a form of requesting routing. This can also be referred to as `Service Locator Pattern`.
