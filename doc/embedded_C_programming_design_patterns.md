@@ -626,3 +626,19 @@ my_object_unlock();
 - **Factory Pattern**: Where you hide the details of creation of the instance from the user thus simplifying the user code.
 - **Prototype Pattern**: Where you copy an existing object using a virtual constructor (a variation of the virtual API pattern).
 - **Endpoint API Pattern**: Where you make a call to a global function and provide a path such as `path/to/endpoint` and the function then resolves the path to a previously registered callback. This is a form of requesting routing. This can also be referred to as `Service Locator Pattern`.
+
+#### 4.10. Quiz
+
+- 1. What is the main purpose of the singleton pattern?
+  - For some entire that require only one instance in our application. To avoid create more instances.
+- 2. When should you avoid using the singleton pattern?
+  - Every time, unless we need only one instance and we have to prevent user create more.
+- 3. How is the singleton pattern implemented in C?
+  - Static variable, hidden in C file, and initialized with specific macro to make sure it have only one instance.
+- 4. Give a few examples of common use cases for the singleton pattern in firmware development?
+  - Logger, and thread scheduler (we need only one scheduler to schedule system).
+- 5. What is best practices when implementing the singleton pattern?
+  - Avoid this. Make sure thread-safe. Should Automatically initialize object (using macro or gcc extension (constructor, priority)). Hidden object.
+- 6. What are common pitfalls?
+  - Using singleton for objects that may have multiple instances.
+  - No thread-safe.
