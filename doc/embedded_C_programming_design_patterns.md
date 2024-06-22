@@ -595,3 +595,13 @@ void main(void)
     }
 }
 ```
+
+- So if somebody else try to acquire the object at the same time, It's not block but return NULL.
+
+#### 4.7. Best practices
+
+- **Automatic initialization**: Initialize the instance at system startup. Use initialization priority to determine exactly when.
+- **Stateless public API**: Use `my_object_operation(params)` instead of `my_object_operation(self, params)` for singletons to avoid giving a pointer to this object to user.
+- **Avoid singletons as much as possible**: Avoid using singletons as much as possible and use conventional object oriented design in most of your code. Only use singleton pattern when it is an absolute requirement that there is only one instance of the object in your application at any time.
+- **Use lock**: Use a lock when initializing the instance to avoid race conditions when multiple threads try to create or access the singleton object at the same time (not always necessary).
+- **Hide the instance**: Use a static variable to hold the instance to ensure that the instance is only visible to the object implementation, and is not directly accessible through any other means than the singleton interface.
