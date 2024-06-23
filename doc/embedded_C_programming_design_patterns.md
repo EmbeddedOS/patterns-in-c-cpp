@@ -818,3 +818,41 @@ shape_t shape_create(enum shape_type type)
     return NULL;
 }
 ```
+
+- In application code:
+
+```C
+int main(void)
+{
+    shape_t rectangle = shape_create(SHAPE_RECTANGLE);
+    shape_t circle = shape_create(SHAPE_CIRCLE);
+    shape_draw(rectangle);
+    shape_draw(circle);
+}
+```
+
+##### 5.5.2. Embedded Factory
+
+```C
+DEVICE_DT_INST_DEFINE(index,        \
+    &uart_stm32_init,               \
+    NULL,                           \
+    &uart_stm32_data_##index,       \
+    &uart_stm32_cfg_##index,        \
+    PRE_KERNEL_1,                   \
+    CONFIG_SERIAL_INIT_PRIORITY,    \
+    &uart_stm32_driver_api);
+
+STM32_UART_IRQ_HANDLER(index)
+
+DT_INST_FOREACH_STATUS_OKAY(STM32_UART_INIT)
+```
+
+- `DEVICE_DT_INST_DEFINE` this macro take same parameters:
+  - `&uart_stm32_init` this function pointer for initialize UART for stm32.
+
+- What this macro does?
+  - place some pointers into tables, and the Zephyrs startup will look and run functions in tables.
+  - Almost code, configuration from device tree, it can do automatically. The use code only need to define some device handlers
+
+- In CPP we have constructors for global, static objects.
