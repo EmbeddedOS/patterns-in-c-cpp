@@ -929,3 +929,38 @@ void main(void)
     shape_draw(circle);
 }
 ```
+
+##### 5.5.4. Prototype Factory
+
+- The key ideal of prototype factory is create an prototype object and every time users want to create new one, we clone from the prototype.
+- This pattern is appropriate for objects that take long time to create, load, for example, have to read from the disk. So we simply duplicate it, that quicker than we create an object from scratch.
+
+```C
+struct shape_api {
+    void (*draw)(shape_t shape);
+    void (*clone)(shape_t shape);
+};
+
+//...
+static shape_t _circle_prototype;
+static shape_t _rectangle_prototype;
+shape_t shape_create(enum shape_type type)
+{
+    switch(type) {
+        case SHAPE_CIRCLE: {
+            return shape_clone(_circle_prototype);
+        } break;
+        case SHAPE_RECTANGLE: {
+            return shape_clone(_rectangle_prototype);
+        } break;
+    }
+
+    return NULL;
+}
+
+void shape_factory_init(void)
+{
+    _circle_prototype = _load_circle_from_disk();
+    _rectangle_prototype = _load_rectangle_from_disk();
+}
+```
