@@ -984,3 +984,17 @@ struct shape_slot
 
 static struct shape_slot _slots[CONFIG_MAX_SLOTS];
 ```
+
+#### 5.6. Conclusion
+
+- Hiding implementation details behind a factory which returns abstract handles to create objects.
+- Abstract factories that themselves are abstract objects.
+- Object creation by copy.
+
+#### 5.7. Best practices
+
+- **Clear interfaces**: Clear define the interface for creating objects, as well as the specific types of objects that can be created. You should be naming your objects properly and structuring your code according to principles of good object oriented design.
+- **Singleton factory**: Use a singleton factory class to ensure that only one instance of the factory exists at any given time. In C this is almost the default mode of operation for the simply factory. For abstract factories you may want to initialize the factories at boot-before entering `main`. You can accomplish this by using boot time initialization callback in Zephyr.
+- **Parameterize your creation**: Think of the factory as a way of creating memory objects from an XML or JSON description. Your factory takes in parameters in a simple form and creates specific objects according to these parameters without exposing the object implementation to the user.
+- **Utilize the abstract API pattern**: Use `CONTAINER_OF` and use the abstract api method. This keeps your code very type safe and robust at runtime. It is difficult to go wrong when you apply the API pattern.
+- **Optimize when needed**: Use the property factory when a complex object takes longer time to create from scratch than to copy in memory.
