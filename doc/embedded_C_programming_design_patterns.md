@@ -856,3 +856,76 @@ DT_INST_FOREACH_STATUS_OKAY(STM32_UART_INIT)
   - Almost code, configuration from device tree, it can do automatically. The use code only need to define some device handlers
 
 - In CPP we have constructors for global, static objects.
+
+##### 5.5.3. Abstract factory
+
+- The basic idea of abstract factory is having abstract objects. We do the same for the factory, so we can have many flexibility builders, for objects.
+
+```C
+struct shape_factory {
+    const struct shape_factory_api * const api;
+}
+
+shape_t shape_factory_create_shape(shape_factory_t factory, enum shape_type type);
+```
+
+- For example, we have a factory to build yellow shapes:
+- Header file:
+
+```C
+struct shape_factory_yellow
+{
+    struct shape_factory factory;
+};
+
+static inline shape_factory_t shape_factory_yellow_cast_to_factory(struct shape_factory_yellow *self)
+{
+    return &self->factory.api;
+}
+
+void shape_factory_yellow_init(struct shape_factory_yellow *self);
+```
+
+- Source file:
+
+```C
+shape_t _yellow_create(shape_factory_t factory, enum shape_type type)
+{
+    struct shape_factory_yellow *self = CONTAINER_OF(factory, struct shape_factory_yellow, factory.api);
+    switch(type)
+    {
+        case SHAPE_CIRCLE: {
+            return _create_yellow_circle();
+        } break;
+        case SHAPE_RECTANGLE: {
+            return _create_yellow_rectangle();
+        } break;
+    }
+
+    return NULL;
+}
+
+const struct shape_factory_api _yellow_api = {
+    .create = _yellow_create
+}
+
+void shape_factory_yellow_init(struct shape_factory_yellow *self)
+{
+    memset(self, 0, sizeof(*self));
+    self->api = &_yellow_api;
+}
+```
+
+- And in the user code:
+
+```C
+void main(void)
+{
+    struct shape_factory_yellow yellow_fac;
+    shape_factory_yellow_init(&yellow_fac);
+
+    shape_factory_t fac = shape_factory_yellow_cast_to_factory(&yellow_fac);
+    shape_t circle = shape_factory_create_shape(fac, SHAPE_CIRCLE);
+    shape_draw(circle);
+}
+```
