@@ -990,6 +990,7 @@ static struct shape_slot _slots[CONFIG_MAX_SLOTS];
 - Hiding implementation details behind a factory which returns abstract handles to create objects.
 - Abstract factories that themselves are abstract objects.
 - Object creation by copy.
+- Object allocation factory.
 
 #### 5.7. Best practices
 
@@ -998,3 +999,38 @@ static struct shape_slot _slots[CONFIG_MAX_SLOTS];
 - **Parameterize your creation**: Think of the factory as a way of creating memory objects from an XML or JSON description. Your factory takes in parameters in a simple form and creates specific objects according to these parameters without exposing the object implementation to the user.
 - **Utilize the abstract API pattern**: Use `CONTAINER_OF` and use the abstract api method. This keeps your code very type safe and robust at runtime. It is difficult to go wrong when you apply the API pattern.
 - **Optimize when needed**: Use the property factory when a complex object takes longer time to create from scratch than to copy in memory.
+
+#### 5.8. Pitfalls of factory pattern
+
+- Insufficient parameterization.
+- Too complex api for creating objects.
+
+#### 5.9. Alternatives
+
+- **Object Pattern**: Sometimes a simple `my_object_init` constructor is sufficient. Most of the time you would be creating the objects directly - either in static memory or inside a memory pool. You would use the standard object `init` pattern for constructor and `deinit` for cleanup. For most use cases this is sufficient and no factory is needed.
+- **Singleton Pattern**: This design patterns uses an API of functions that do not take an object as parameter. This effectively helps one to hide the implementation inside the C file but unfortunately has the drawback of there only ever being one instance of the object to operate.
+- **Bridge Pattern**: This design pattern involves creating an abstraction layer between two different components, allowing them to interact without being tightly coupled. This method means that we `extend` one object with additional methods defined in a separate C file exposing a separate API where the public headers of that API do not depend on the implementation of our specific objects being created. This means that the bridge API depends on accessing private data - but not our user code.
+
+#### 5.10. Quiz
+
+- 1. What is the main purpose of the factory design pattern?
+  - Try to separate and hide implementation of creating objects.
+  - Reuse construction code.
+- 2. What are the key elements of the factory design pattern?
+  - Create objects by parametric way.
+  - factory, abstract object, CONTAINER_OF().
+- 3. What are some benefits of using the factory design pattern?
+  - Provide generic APIs to users so they can create objects easily.
+  - Separate, de-couple mean easy to test, scale and maintain.
+  - Data driven object -> init device tree model.
+- 4. What are some examples of when the factory pattern is used in Zephyr? How are objects and devices initialized before main application is started?
+  - Using macros to create object - register function pointers to tables with priority, the start-up code will look for this table and start calling init functions.
+- 5. In what scenarios is the factory pattern useful for managing the creation and lifetime of objects?
+  - Pooled factory when objects is managed by static array and generic APIs.
+- 6. How can we easily have a pool of slots from which to allocate our objects and manage it in an object oriented (and type safe) manner?
+  - Create an static array of slots, slots contain union data of object structures.
+- 7. What are some of the PROS and CONS of the factory?
+  - PROS: complexity.
+- 8. WHat are some alternatives?
+  - Object patterns is a best choice.
+  - Bridge patterns to de-couple between components is another choice.
