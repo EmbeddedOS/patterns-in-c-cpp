@@ -686,7 +686,7 @@ my_object_unlock();
 - **Prototype factory**: A factory that does a deep copy of existing objects (prototypes).
 - **Pooled factory**: An optimization technique where objects are kept in a `free` and `in-use` queue.
 
-##### 5.6. Simple factory
+##### 5.5.1. Simple factory
 
 - This is a public header:
 
@@ -736,4 +736,85 @@ struct shape_rectangle {
 }
 ```
 
-- Continue with circle API page.
+- For shape circle implementation:
+
+```C
+static void _shape_circle_draw(shape_t shape)
+{
+    /* `shape` object is pointer to pointer to `struct shape_api`.
+     * `struct shape_circle` have `struct shape` like parent struct.
+     * `struct shape` have `struct shape_api` that actually is `shape` object.
+     *
+     * So what we do here is: Get Original `struct shape_circle` object from the
+     * `shade_t` object. So we can get more data of the original object, this is
+     * similar like we are getting the `this` pointer in CPP, and use it to do
+     * more specific task of object, access private data, methods, etc.
+     */
+
+    struct shape_circle *self = CONTAINER_OF(shape, struct shape_circle, shape.api);
+
+    /* Now we can access private methods. */
+    _do_draw_circle(self->radius);
+}
+
+const struct shape_api _circle_api = {
+    .draw = _shape_circle_draw
+}
+
+static void shape_circle_init(struct shape_circle *self)
+{
+    memset(self, 0, sizeof(*self));
+    self->api = &_circle_api;
+}
+```
+
+- And similar way for rectangle object:
+
+```C
+static void _shape_rectangle_draw(shape_t shape)
+{
+    struct shape_rectangle *self = CONTAINER_OF(shape, struct shape_rectangle, shape.api);
+
+    // Now we can access private methods.
+    _do_draw_rectangle(self->width, self->height);
+}
+
+const struct shape_api _rectangle_api = {
+    .draw = _shape_rectangle_draw
+}
+
+static void shape_rectangle_init(struct shape_rectangle *self)
+{
+    memset(self, 0, sizeof(*self));
+    self->api = &_rectangle_api;
+}
+```
+
+- And in the `shape_create()` API and `shape_draw()` API, that we actually provide to customer here are implemented like this:
+
+```C
+void shape_draw(shape_t shape)
+{
+    /* Call object virtual method. */
+
+}
+
+shape_t shape_create(enum shape_type type)
+{
+    switch (type)
+    {
+        case SHAPE_CIRCLE: {
+            struct shape_circle *shape = (struct shape_circle *)your_alloc();
+            shape_circle_init(shape);
+            return &shape->api;
+        } break;
+        case SHAPE_RECTANGLE: {
+            struct shape_rectangle *shape = (struct shape_rectangle *)your_alloc();
+            shape_rectangle_init(shape);
+            return &shape->api;
+        } break;
+    }
+
+    return NULL;
+}
+```
