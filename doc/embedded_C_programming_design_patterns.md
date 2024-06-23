@@ -964,3 +964,23 @@ void shape_factory_init(void)
     _rectangle_prototype = _load_rectangle_from_disk();
 }
 ```
+
+##### 5.5.5. Pooled Factory
+
+- We allocate a memory pool, so we don't worry about allocate objects and free objects at run time (just set-clear `empty` flag and reuse the memory).
+- But limitation of that pattern is that we have limited object.
+
+```C
+union shape_slot {
+    struct shape_circle circle;
+    struct shape_rectangle rectangle;
+};
+
+struct shape_slot
+{
+    bool empty;
+    union shape_slot data;
+}
+
+static struct shape_slot _slots[CONFIG_MAX_SLOTS];
+```
