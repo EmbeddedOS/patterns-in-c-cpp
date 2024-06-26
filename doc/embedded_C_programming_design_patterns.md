@@ -1269,3 +1269,13 @@ void button_do_something(struct button *self)
 - 1. What is main problem that is being resolved by using the callback mechanism?
   - Decoupling observer and observed object. And we can have many listeners for one speaker.
 - 2. How does the observer/callback pattern help maintain object oriented code organization in C?
+  - Listening for object property changes.
+  - From the `cb` argument we can get the original struct -> take more private data for custom callbacks.
+- 3. What would happen if you delivered the event using a direct call instead? what implications would it have for structure of your code?
+  - The code is coupled -> observed object depends on observer object.
+- 4. Why are we always enclosing our callback in a struct? How would it negatively impact our design if we did not do this?
+  - struct to easy edit properties without changing API.
+  - Easy to get parent structure with CONTAINER_OF, and get more data from that.
+- 5. Why do we use `CONTAINER_OF` to get our context and not just make the context global or pass it directly from the subject to the callback?
+  - global means need to protect. Hard to see data flow.
+  - pass direct means we can not have generic APIs for all callbacks. CONTAINER_OF help us to design a generic API with many behaviors.
