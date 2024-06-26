@@ -1034,3 +1034,238 @@ static struct shape_slot _slots[CONFIG_MAX_SLOTS];
 - 8. WHat are some alternatives?
   - Object patterns is a best choice.
   - Bridge patterns to de-couple between components is another choice.
+
+### 6. Callback pattern
+
+- Object oriented callbacks implementation in C for embedded firmware.
+
+#### 6.1. Definition
+
+- **Object being observed**: This can be an opaque object (with hidden implementation) exposing only an interface to register callbacks for various events. Observers register callbacks with this object.
+- **Callback receiver**: This is the code that executes the callback. One important consideration is that this function must have a way to retrieve callback owner state because from the perspective of the object being observed, we don't know about that is observing it - we only have the callback.
+- **Full separation of concerns**: The object being observed is typically fully separated from the objects observing it. This is an important feature of this pattern because it allows clean separation of concerns.
+
+#### 6.2. Use cases
+
+- **A mechanism for notification**: the core concept behind this pattern is ability to register and receive notifications.
+- **Used to `Observe` State Of Object**: This can be done in response to event notifications or directly through parameters of the callback.
+- **An idiom for `One-To-Many` notifications**: It is not uncommon to have unlimited number of observers spread around your code. The pattern helps keep them independent of each other.
+- **Used for patterns like the work queue**: When used together with a work queue, we can build observer of a work queue item which will execute a callback when a timeout expires. This is very powerful way to avoid unnecessary threads in embedded systems.
+
+#### 6.3. Benefits
+
+- 1. **Decoupling**: A callback can be represented by a structure making it the only data structure that needs to be shared between the observing code and the object being observed. This is important because we don't want our object being observed to have to depend on every single other that needs to receive notifications from it.
+
+- 2. **Enables One-To-Many Notifications**: Since the only shared data structure is our callback structure, we can easily add features to this callback, such as the ability to arrange our callbacks into a list which in turn allows our object to send notifications to multiple receivers in sequence.
+
+- 3. **Code reuse**: Callback listeners (observers) can be reused in multiple subjects, reducing the duplication of code.
+
+- 4. **Scalability**: The callback pattern makes it easy to add new observers without affecting the subject or other observers (without the callback pattern, our subject would have to be directly dependent on API of all observers - which is clearly very bad).
+
+- 5. **Flexibility**: The callback pattern provides a way to change the notification mechanism dynamically, making the system more flexibility.
+
+- 6. **Ease of maintenance**: The observer pattern makes it easy to maintain the system, as it reduces the dependencies between objects and makes it easier to modify or extend the system. One of the biggest sources of maintenance drag in many C projects is `dependencies out of control`.
+
+#### 6.4. Drawbacks
+
+- **Performance overhead**: Delivering all of the notifications of a change to all listeners can result in a significant performance overhead, especially if there are many listeners.
+- **Lockup**: If one observer/listener happens to block execution for whatever reason, all other listeners will not have the chance to run. Preferably, any action done as part of the response to a notification must make sure that it does not sleep (block) the execution in any significant way.
+- **Complexity**: The callback pattern can increase the complexity of the system, as it requires implementing and maintaining the observer list and the notification mechanism. Luckily we can reuse ready made data structures for this which are available to us in Zephyr RTOS.
+- **Tight coupling risk**: If not implemented carefully, the callback pattern can result in tight coupling between the subject and observers, making it difficult to change to extend the system. This is particularly a risk when the callback is implemented as a direct call instead of a function pointer (which is something that is easily identified by a trained embedded engineer).
+- But can be very subtle for somebody not experienced enough.
+- **Order of notifications**: There is typically no predictable sequence in which observers are notified. This can create problems if the listeners are designed in a way that does not allow them to perform actions independently.
+
+#### 6.5. Implementation
+
+```C
+struct button_callback
+{
+    void (*cb)(struct button_callback *cb);
+};
+```
+
+- Advantage #1: We can easily instantiate the callback itself - which works as a much cleaner alternative to typedef.
+- Advantage #2: We can use pointers to the callback structure to get address of higher level context of module a instance which allows us to decouple A and B. This would be impossible if our callback was just a function pointer.
+
+- Application Example: Button Header
+
+```h
+#include <zephyr/sys/slist.h>
+#include <stddef.h>
+
+struct button {
+    /* Alternative 1: single callback. */
+    struct button_callback *cb;
+
+    /* Alternative 2: multiple callbacks. */
+    sys_slist_t callbacks;
+};
+
+// This is a public callback definition.
+struct button_callback
+{
+    sys_node_t node;
+    void (*cb)(struct button_callback *cb);
+};
+
+void button_init(struct button *self);
+void button_deinit(struct button *self);
+void button_add_callback(struct button *self, struct button_callback *cb);
+void button_remove_callback(struct button *self, struct button_callback *cb);
+void button_do_something(struct button *self);
+```
+
+- Application Example: Button Implementation
+
+```C
+#include <button.h>
+#include <zephyr/sys/slist.h>
+#include <string.h>
+
+void button_init(struct button *self)
+{
+    memset(self, 0, sizeof(*self));
+}
+
+void button_deinit(struct button *self) {
+    self->cb = NULL;
+}
+
+void button_add_callback(struct button *self, struct button_callback *cb)
+{
+    self->cb = cb;
+}
+
+void button_delete_callback(struct button *self, struct button_callback *cb)
+{
+    self->cb = NULL;
+}
+
+void button_do_something(struct button *self)
+{
+    // Do something.
+
+    // Notify another.
+    if (self->cb)
+    {
+        self->cb->cb(self->cb);
+    }
+}
+```
+
+##### 6.5.1. Observer Implementation
+
+```C
+struct observer {
+    /** Button Instance **/
+    struct button *btn;
+
+    /** Button Callback **/
+    struct button_callback cb;  // Our callback.
+};
+
+static void observer_on_button_cb(struct button_callback *cb)
+{
+    // This is how we can now get pointer to instance of B
+    // notice that the callback is generic.
+    struct observer *self = CONTAINER_OF(cb, struct observer, cb);
+    printk("Observer callback for button %p\n", self->btn);
+}
+
+void observer_init(struct observer *self, struct button *a)
+{
+    self->btn = a;
+    self->cb.cb = observer_on_button_cb;
+    button_add_callback(a, &self->cb);
+}
+
+void observer_deinit(struct observer *self)
+{
+    button_remove_callback(self->btn, &self->cb);
+}
+```
+
+##### 6.5.2. Application usage
+
+```C
+struct controller ctrl;
+struct button btn;
+
+
+button_init(&btn);
+controller_init(&ctrl, &btn);
+
+/* This will call controller callback functions. */
+button_do_something(&btn);
+
+controller_deinit(&ctrl);
+button_deinit(&btn);
+```
+
+##### 6.5.3. List of callbacks
+
+- In case you want more lists of callbacks instead of only one.
+
+```C
+struct button {
+    /* List of callbacks. */
+    sys_slist_t callbacks;
+}
+
+struct button_callback {
+    /* Callback list node. */
+    sys_slist_t node;
+    void (*cb)(struct button_callback *cb);
+}
+
+void button_add_callback(struct button *self, struct button_callback *cb)
+{
+    sys_slist_append(&self->callbacks, &cb->node);
+}
+
+void button_delete_callback(struct button *self, struct button_callback *cb)
+{
+    sys_slist_find_and_remove(&self->callbacks, &cb->node);
+}
+
+void button_do_something(struct button *self)
+{
+    sys_node_t *node;
+
+    /* Call all the callbacks. */
+    SYS_SLIST_FOR_EACH_NODE(&self->callbacks, node)
+    {
+        // once again we use container of here since we know node points to cb->node.
+        struct button_callback *cb = CONTAINER_OF(node, struct button_callback, node);
+        cb->cb(cb);
+    }
+}
+```
+
+#### 6.6. Best practices
+
+- **Always use struct for the callback**: This gives context and most importantly ensures that we can use it easily together with the object pattern and make our architecture truly object oriented.
+- **Always pass context to callback**: do not use `custom` context such as `user data` or some other thing you have invented just for passing data to the callback. Instead place the data either in the callback struct itself or in the enclosing object.
+- **Avoid time consuming operations in callback**: It is better to defer operations to a dedicated work queue if they take longer time because a time consuming callback will stall all other callback handlers that are also waiting for the notification.
+- **Use CONTAINER_OF**: Do not try to pass context as a separate `user data` variable or anything like that. The callback pattern makes these things unnecessary.
+
+#### 6.7. Common Pitfalls
+
+- **Callback going out of scope**: failing to unregister callbacks before destroying a callback observer is one of the bigger pitfalls of this pattern.
+- **You make your data global**: this may look like a nice convenience, but it completely violates the data flow through the code. If you for instance make the callback operate on global data, you have not only messed up the data flow for one listener - but for all listeners by not passing a pointer to a structure that holds the callback.
+- **Inventing `user-data` passing**: whenever I see some variation of `void * user_data` in a structure or callback, I know that the developer does not really understand how to property implement the observer pattern. Remember: you do not need to store pointer to user data at all. You get access to user data using `CONTAINER_OF` macro.
+- **Life cycle of objects**: If you not pay close attention to when a stack allocated listener goes out of scope. you may run into very weird problems caused by garbage pointers (due to the fact that the object no longer exists but it still referenced from the list of callbacks!). So pay close attention to where you data resides. Of course, if you use the object pattern, you will have a pretty good order in your data.
+
+#### 6.8. Alternatives
+
+- **Event Bus Pattern**: This pattern is slightly different from observer in that we have a global event `queue` (observer/callback pattern has NO event queue) that stores events in transit. This pattern is used to implement conventional `publish/subscribe` mechanisms at small scale in C programs. Both observer and the observed become decoupled.
+- **MVC (Model-View-Controller) Pattern**: This pattern is a derivation of the callback pattern in that the controller acts as an adapter between the model and the view. The controller uses the model to represent state of the program and registers callbacks with the visual representation to respond to events that are necessary for smooth visual rendering.
+- **Command Request Pattern**: This pattern uses a command request as central way to pass an event. It is different from the event pattern in that the request itself can be queued and the object that queues the event does not need to know about the type of object that receives the event.
+
+#### 6.9. Conclusion
+
+#### 6.10. Quiz
+
+- 1. What is main problem that is being resolved by using the callback mechanism?
+  - Decoupling observer and observed object. And we can have many listeners for one speaker.
+- 2. How does the observer/callback pattern help maintain object oriented code organization in C?
