@@ -1537,3 +1537,188 @@ void main(void)
 - 4. What main drawback do traits have when they embedded into the derived struct compared to pure virtual interfaces which are constant and only referenced from the derived struct though a pointer to the interface?
   - More wrapper functions.
   - Don't have generic interface.
+
+### 8. Virtual API Pattern
+
+- We have a way to implement polymorphism.
+- Make sure we have type-safe and memory efficiency way.
+
+#### 8.1. Defining characteristics
+
+- **Constant trait objects and methods that operate on them**: These are our generic virtual functions which can be implemented in derived classes. These correspond to `Abstract Interface` in languages like C++.
+- **Implementation of abstract interface**: any type that implements a particular abstract interface, always does so by implementing the virtual functions in the trait that these types inherit.
+- **Traits are stored as pointers in derived class**: The trait object is always constant and is stored as a pointer. It is also passed as pointer to pointer type to all trait callbacks. This is mainly to make sure that we can scale to many instances without duplicating the function pointer table across all instances.
+
+#### 8.2. Use cases
+
+- **Device Drivers**: This pattern is useful when you have many different implementations of essentially the same interface - such as for example a UART. Thus it is very often used for implementing many different device drivers that all implement the same API and to be able to treat all implementations just the same (polymorphism).
+
+- **Plugins**: One very good example for this pattern is when you load shared library and call some predefined function inside it which then returns an abstract interface. Plugins use this pattern a lot. This interface will continue to work even if the implementation changes since the trait definition is the only shared dependency.
+
+- **Abstract data types**: any time we want to treat a collection of same or different objects just the same, we can use the abstract API pattern to implement an interface for interacting with these objects. Each implementation then needs to implement this interface in order to comply with the expectations of any code that would then use this object generically.
+
+#### 8.3. Benefits
+
+- **Decoupling**: Since the interface is very lightweight and consists only of function pointers, it almost completely decouples user from the implementation. If we then also use the opaque pattern, we achieve full interface decoupling.
+
+- **Type safety**: One of the biggest benefits of implementing abstract interfaces as described in this training module is that it is completed type safe. There are no `void *` pointers used and no casting that can potentially lead to incorrect results. Instead we use `CONTAINER_OF` and keep our callback data structure always constant from compile time.
+
+- **Opaque handles**: The user deals only with opaque handles representing the abstract API and does not need to call contained functions directly. This means that user can not accidentally modify the content of this handle because there is no visible data structure for it. The data structure is only visible to implementation of generic API and the multitude of implementations of the abstract interface.
+
+#### 8.4. Drawbacks
+
+- **Complexity**: This pattern is more complex to implement than the traits pattern we looked at in the `inheritance` module. It requires the programmer to follow a precise model of implementation without which the pattern would lack key functionality.
+
+- **Inflexibility**: One of the key factors of this pattern is that the interface must be constant and relatively generic. If your objects are not sufficiently describable by a generic interface then it is possible that you may need multiple different interfaces in parallel.
+
+- **Performance overhead**: Although this overhead is very small, there is the overhead to always be calling the interface methods through two indirections. First one is when we call the generic wrapper method and the second indirection is when that method calls our implementation. However it is worth noting that this overhead is tiny compared to everything you are likely to do as part of the implementation method. Therefore it is usually a fair price for the improved flexibility.
+
+#### 8.5. Implementation
+
+- **Generic API**: This part is exposed outside of your library. It does not include any data structures at all. All the member functions of this interface operate on pointer to pointer of the API data structure meaning that the data structure it self only needs to be declared but does not need to be defined in the public interface.
+
+- **API Interface**: This is similar to how we previously implemented traits in the chapter on inheritance. The difference is that the API data structure is only shared between the generic API and the implementations of this interface.
+
+- **Implementation**: This is the concrete implementation. It only depends on the shared API and all other aspects of the implementation are hidden. You will have to use Opaque Pattern here or have some other way to register the abstract interface pointer so that the application can query it (for example, by maintaining a list of all implementations indexed by a string or an enum - or through dynamic allocation).
+
+##### 8.5.1. Trait definition
+
+- In the `serial_ops.h`:
+
+```h
+/* Serial API. */
+struct serial_ops {
+    int (*write)(const struct serial_ops ** handle, const char *data, size_t size);
+    int (*read)(const struct serial_ops ** handle, char *data, size_t size);
+}
+
+/* You can typedef it like this if you want. */
+/* typedef const struct serial_ops ** serial_t; */
+```
+
+##### 8.5.2. Generic Trait API
+
+- We will only `serial.h` to the customer:
+
+```h
+struct serial_ops;
+int serial_write(const struct serial_ops **handle, const char *data, size_t size);
+int serial_read(const struct serial_ops **handle, const *data, size_t size);
+```
+
+- And here is our implementation for generic APIs `serial.c`:
+
+```C
+int serial_write(const struct serial_ops **handle, const char *data, size_t size)
+{ // This method just wrap: (*handle)->write(), so we can avoid expose and call it everywhere in the application code.
+    /* Here we do have access to the API so we can use it directly. */
+    return (*handle)->write(handle, data, size);
+}
+
+int serial_read(const struct serial_ops ** handle, char *data, size_t size)
+{
+    /* Here we do have access to the API so we can use it directly. */
+    return (*handle)->read(handle, data, size);
+}
+```
+
+##### 8.5.3. Implementation header
+
+- Now we implement variants from base generic APIs. This is specific for implementations. For example we can have many types like: stm32 uart 1, etc. We also provide it with generic API header to the customer.
+
+- A header follow the format:
+
+```h
+struct serial_impl {
+    /* Pointer to base operation. */
+    const struct serial_ops *serial;
+
+    /* More private data here. */
+};
+
+void serial_impl_init(struct serial_impl *self);
+const struct serial_ops ** serial_impl_to_serial(struct serial_impl *self);
+```
+
+##### 8.5.4. API Implementation
+
+```C
+#include "serial_ops.h"
+static serial_impl_write(const struct serial_ops ** handle, const char *data, size_t size)
+{
+    // We here can resolve concrete type in the usual type safe way.
+    struct serial *self = CONTAINER_OF(handle, struct serial_impl, serial);
+
+    return size;
+}
+
+static serial_impl_read(const struct serial_ops ** handle, char *data, size_t size)
+{
+    // We here can resolve concrete type in the usual type safe way.
+    struct serial *self = CONTAINER_OF(handle, struct serial_impl, serial);
+
+    return size;
+}
+
+static const struct serial_ops _ops = {
+    .write = serial_impl_write,
+    .read = serial_impl_read
+}
+
+void serial_impl_init(struct serial_impl *self)
+{
+    memset(self, 0, sizeof(*self));
+    self->serial = &_ops;
+}
+
+
+const struct serial_ops ** serial_impl_to_serial(struct serial_impl *self)
+{
+    return &self->serial;
+}
+```
+
+##### 8.5.5. Usage: Application code
+
+```C
+// Initialization of implementation (usually would be done separately from usage below).
+struct serial_impl serial;
+serial_impl_init(serial);
+
+
+// Get the handle that can be passed around and used with generic API.
+const struct serial_ops ** handle = serial_impl_to_serial(&serial);
+const char *data = "Hello world\n";
+serial_write(handle, data, strlen(data));
+```
+
+#### 8.6. Best practices
+
+- **Trait ops must be thoroughly defined**: Every implementation must follow clear implementation guidelines and the behavior of each implementation should be the same.
+- **Typedef the handle type for simplicity**: since the handle type actually declares a new type and is used repetitively in many places it is good to typedef it. You can make a typedef exception for this type and add it to your typedef file.
+- **Keep your traits constant**: this pattern relies on the interfaces rarely changing so you should try to think ahead when designing the interface and then keep it constant. Any changes to the expected behavior of the interface itself will likely require substantial changes to all implementations.
+
+#### 8.7. Common pitfalls
+
+- **Overusing abstract interfaces**: If everything in your software is done through an abstract interface, you will have interfaces that need to be updated often and updating the interface requires reworking parts of the implementations. So you should reserve use of abstract interfaces only for places where polymorphism makes sense (ie. treating many items using the same set of actions).
+- **Insufficient testing**: The full set of interface requirements must always be verified using unit tests for each implementation of that interface. Not doing this will lead to missed bugs that occur when you update the interface but fail to update all implementations.
+- **Overly specific interfaces**: The interface should capture generic functions of a large category of objects. You should design your interface in such a way that you rarely experience situations where you need to write dummy methods for an interface because some operation of the interface does not make sense for your implementation.
+- **Inconsistent implementation of virtual API pattern**: it is important that you apply this pattern consistently and always follow the same implementation approach.
+
+#### 8.8. Alternatives
+
+- **Callback pattern**: The callback pattern is a simpler version of the abstract interface where instead of defining a generic API we work with lists of callbacks.
+- **Event Bus Pattern**: An event bus can implement a data driven abstract interface where both the function name and data can be encoded into an event and published on the event bus. This pattern is much more complex than the abstract interface pattern and often more suitable for many-to-many publish subscribe scenarios.
+
+#### 8.9. Quiz
+
+- 1. How does the Virtual API pattern differ from the trait objects described in the inheritance Pattern?
+  - We hidden the trait behavior internally.
+  - Virtual API define same API for all instance and make pointers are fixed.
+- 2. How does defining our API handles as pointer to pointer help use stay memory efficient, particularly with large numbers of instances?
+  - pointer is small.
+  - We have a lot of constant API handle per instance.
+- 3. Why is it so important that the virtual API does not contain any implementation specific details at all?
+  - Because this is generic for everyone, so, it should be small and reusability.
+- 4. Why do we need to have a generic API along side of our trait objects?
+  - Virtual API allow us to generic an API and hides all implementations of the trait object itself.
