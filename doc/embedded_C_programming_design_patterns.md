@@ -2082,3 +2082,21 @@ int my_object_method(struct my_object *self)
 - **No clear definition of standard return values**: The most serious pitfall with return values is not defining their meaning. If every function returns values that can be potentially mixed up with other values then you can never really know what to expect. This is why we have adopted `errno` codes as standard way to indicate errors - because they are defined as macros and they are ubiquitous - they are available everywhere - they are standardized. This means we always can deduce what the problem may be looking at the `errno` code.
 
 - **Return structs**: When you need to return a struct, it is better to pass it as a parameter and them simply return an integer status code signaling whether the struct parameter was filled with valid data or not.
+
+#### 10.9. Alternatives
+
+- **Exceptions**: This is only possible in CPP or Rust. In C, return code is the only way to pass exceptions back to the caller.
+- **Logging**: another way to handle status by generating a log message. You should combine this with status code.
+- **Panic**: an assertion should be used for fatal errors and the application should call system panic function which in turn should reboot the device after logging the reason.
+- **Long jump**: switch context during an exception and returning to an arbitrary place in the application where a corresponding `setjump` call was made. Don't use it except you know what exactly you wanna do.
+
+#### 10.10. Quiz
+
+- 1. What status code should return upon success when there is no more information that needs to be conveyed?
+  - 0.
+- 2. What status code function should return on failure?
+  - negative number that follow errno.
+- 3. Why is it not a good idea to forward a return status from function you have called and return it without changes?
+  - No one want to handle them?
+- 4. When should you return a positive status code?
+  - number of affected items.
