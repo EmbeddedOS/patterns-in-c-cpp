@@ -2016,3 +2016,26 @@ drawable_draw(&square.drawable);
 ## IV. Behavior pattern
 
 ### 10. Return value pattern
+
+- Standardize status reporting from functions in C.
+- The C don't have exception features so we cannot emit and catch particular case.
+
+#### 10.1. Definition
+
+- **Signed integer return value**: We use standard way of reporting status by returning a status value as a signed int in C.
+- **Zero means no error**: A zero return value shall always mean that there was no status to return - meaning that the operation has been successful.
+- **Negative value means error**: A negative status means that something negative has happened and the value of the negative number that is returned shall specify what error has occurred.
+- **Positive value means status**: a positive status means that the operation was at least partially successful and the return code shall be function specific success return code. For functions that read and write data, this value could for example mean number of items successfully written or not.
+
+#### 10.2. Use cases
+
+- **Every non-trivial function**: standardized return values should be used at all times when a function does any operation that may fail or which can produce different status.
+- **Every function that can fail**: Any function that fail must return a negative error code upon failure condition.
+- **Every function that has status to report**: Any function that may succeed in at least two ways.
+
+#### 10.3. Benefits
+
+- **Standardized expectations**: We can have standard expectations about every function that returns a status code. We don't need to open documentation each time.
+- **Clean code**: Our code can be clean and easy to understand.
+
+#### 10.4. Drawbacks
