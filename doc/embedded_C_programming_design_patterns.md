@@ -2039,3 +2039,40 @@ drawable_draw(&square.drawable);
 - **Clean code**: Our code can be clean and easy to understand.
 
 #### 10.4. Drawbacks
+
+- **Pressure on programmers**: This pattern puts extra pressure on programmer to write clean code. Return values are often not understood and much less often checked. If you are using tools like PC-Lint you will be inclined to check all return values because otherwise it would be a lint error - but for programmers who are not used to top quality programming this can be a difficult pattern to follow.
+- **Longer code**: since we always check return values we need additional `if` statements and blocks which make our code longer. There is no good way around this.
+- **Limited level of detail**: Sometimes we have to return status codes that do not accurately describe the actual error since status codes are generic. However, in most cases this is not an issue we simply treat a negative code as a generic error code.
+
+#### 10.5. Implementation
+
+- **Every non-trivial function must return integer status code**: C does not support exceptions with stack unwinding like C++ so the easiest way is to pass status code through return value.
+- **Return values must be checked**: Every call of a function that has a return value must be checked when the function is called.
+- **Error cods are always constant**: upon getting an error code, we try to handle the error if we can not handle it we always return a well defined error code to the caller.
+
+```C
+int my_object_method(struct my_object *self)
+{
+    if (there_is_error)
+    {
+        return -ERNOCODE;
+    }
+
+    return 0;
+}
+```
+
+#### 10.6. Error code convention
+
+- **Negative error codes correspond to ERRNO codes**: we always use the `errno.h` for negative error codes.
+- **Zero always means success**: returning a zero status code always means operation completed without issues.
+- **Positive error codes are function specific**: The meaning of positive values must always be documented in documentation of the function that returns them.
+
+#### 10.7. Best practice
+
+- **Always check return codes**: not doing so must be configured to be an error in your lint setup.
+- **Always return errno**: If your function fails then return a negative value using one of the predefined `errno` codes.
+- **Error status always well defined**: If a function that your function calls fails then return a negative errno code that best describes the state of your object but not directly return the return code of the function you have called. Instead return an error code that is constant for your function.
+- **Zero means success**: If your function succeeds and does not require reporting partial success then always return 0.
+- **Partial success always uses positive numbers**: If your function requires partial success indication (such as number of items processed) then return this number as a positive integer.
+- **Use parameters for complex return values**: If you need to return a complex return value then simply return zero to indicate success and write this complex value into a structure pointed to by one of your function's parameters. Do not return complex structures as return values.
