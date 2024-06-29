@@ -1722,3 +1722,264 @@ serial_write(handle, data, strlen(data));
   - Because this is generic for everyone, so, it should be small and reusability.
 - 4. Why do we need to have a generic API along side of our trait objects?
   - Virtual API allow us to generic an API and hides all implementations of the trait object itself.
+
+### 9. Bridge Pattern
+
+- Connecting two independent hierarchies of objects.
+
+#### 9.1. Defining Characteristics
+
+- **Decoupling of abstractions and implementations**: This is done both at the interface towards the user, and at the point where the controlling implementation interfaces with the object being controlled. Both interfaces must be abstract interfaces (i.e. must use the Virtual API Pattern).
+- **Data flow through a `bridge`**: Classes are extended by controlling an interface on one end of the bridge that controls an implementation on the other end of the bridge. Hence being called the `bridge` pattern.
+- **Two distinct hierarchies**: The pattern is most clear when you can see two different hierarchies that are loosely coupled over a `bridge` through which data flows. The loosely coupled hierarchies are a positive consequence of the bridge pattern and in fact what the bridge pattern is trying to achieve in the first place.
+
+#### 9.2. Uses cases
+
+- **Abstraction and implementation need to vary**: The Bridge Design Pattern is ideal when the requirements for the abstraction and implementation are likely to change independently. The beauty of a virtual method table is that we can pass it across DLL boundaries. This allows us to define the implementation in one compilation unit, export the abstraction and then have another implementation use this abstraction in another compilation unit (shared library).
+
+- **Multiple implementations**: The bridge design pattern is also ideal when there are multiple implementations possible for a single abstraction and the implementation needs to be chosen dynamically at runtime. A good example of this is the old Quake3 engine where the engine itself could evolve separately from the game dll and the game was calling into the engine using an exported abstract interface.
+
+- **Abstracted Access to Hardware or Platform Services**: The Bridge Design Pattern is ideal when the system needs to access hardware or platform services, as it provides a way to abstract these services from the rest of the system and allow for different implementations to be used on different platforms. An example of this use case is the **Linux System Call interface** and the corresponding C library that provides an abstraction that is actually seen by the application.
+
+- **Plug-In Architecture**: The Bridge Design Pattern is ideal when the system needs to support plug-ins or add-ons, as it provides a way to create a plug-in architecture that allows for new implementations to be added to the system without affecting the rest of the system. The old Quake games were actually implemented as `plugins` to the game engine which was compiled as the main executable and the game itself was a dynamic library.
+
+#### 9.3. Benefits
+
+- **Bridge between two object hierarchies**: You have two representations of complex data structures with a loosely coupled interface between them.
+- **Dependency separation**: The concrete implementation of one hierarchy does not need to pull in dependencies of the other hierarchy (example: in a game where every object has a physics body and a mesh body, you can separate these two hierarchies and implement bridge pattern between them to keep them separate and possibly even on different machines).
+- **Separation of concerns**: enable two hierarchies to be created representing different parts of the same system while allowing each hierarchy to evolve independently in terms of implementation.
+
+#### 9.4. Drawbacks
+
+- **Increased complexity**: Instead of just a single hierarchy and mixed dependencies you have to maintain two separate hierarchies and links between them.
+- **Additional indirection**: Since each operation involves calls through multiple interfaces, there is a potential with a lot of very `light` methods which simply make another call.
+- **Increased development time**: Due to additional data structures and classes that have to be implemented.
+
+#### 9.5. Implementations
+
+- We gonna use an example:
+- **Client/Server**: We will be creating two local hierarchies of objects where one represents the client structures and the other represents server structures. We will use the example of physics and drawable objects.
+- **Two hierarchies**: Client hierarchy handles visual representation while server hierarchy handles physical behaviors. We will implement both in Rust and C.
+- **Client: Drawable**: the objects on client side implement `Drawable` interface which we will define.
+- **Server: PhysicsObject**: The objects on the server side implement `PhysicsObject` interface.
+- **User interacts with client objects**: finally we will allow the user to interact with client side instances and the bridge will connect these to the server side instance.
+
+##### 9.5.1. Implementation: Rust: Server side objects
+
+```rust
+pub struct Circle {
+
+}
+
+pub struct Square {
+
+}
+
+pub struct Point2D (f32, f32);
+
+impl Circle {
+    pub fn new() -> Self {
+        return Self {};
+    }
+}
+
+impl Square {
+    pub fn new() -> Self {
+        return Self {};
+    }
+}
+```
+
+##### 9.5.2. Implementation: Rust: Client Interface
+
+- Physics object interface:
+
+```Rust
+
+/* Provide this abstract API to user. */
+pub trait PhysicsObject {
+    fn position(&self) -> Point2D;
+}
+
+/* Client have two different virtual method for Circle and Square. */
+impl PhysicsObject for Circle {
+    fn position(&self) -> Point2D {
+        printk("server: get position for circle\n");
+        return Point2D(1.0, 1.0);
+    }
+}
+
+impl PhysicsObject for Square {
+    fn position(&self) -> Point2D {
+        printk("server: get position for square\n");
+        return Point2D(1.0, 1.0);
+    }
+}
+```
+
+##### 9.5.3. Implementation: Rust: Client Side Object
+
+```Rust
+pub struct Circle<P: server::PhysicsObject> {
+    physics: P,
+}
+
+pub struct Square<P: server::PhysicsObject> {
+    physics: P,
+}
+
+impl<P: server::PhysicsObject> Circle<P> {
+    pub fn new(p: P) -> Self {
+        return Self { Physics: p };
+    }
+}
+
+impl<P: server::PhysicsObject> Square<P> {
+    pub fn new(p: P) -> Self {
+        return Self { Physics: p };
+    }
+}
+```
+
+##### 9.5.4. Implementation: Rust: Client Side drawable interface
+
+```Rust
+pub trait Drawable {
+    fn draw(&self);
+}
+
+impl<P: server::PhysicsObject> Drawable for Circle<P> {
+    fn draw(&self) {
+        let _p = self.physics.position();
+        printk("Client: drawing circle at position\n");
+    }
+}
+
+impl<P: server::PhysicsObject> Drawable for Square<P> {
+    fn draw(&self) {
+        let _p = self.physics.position();
+        printk("Client: drawing square at position\n");
+    }
+}
+
+```
+
+##### 9.5.5. Implementation: Rust: Application code
+
+```Rust
+use client::{Drawable};
+let circle = client::Circle::new(server::Circle::new());
+let square = client::Circle::new(server::Square::new());
+circle.draw();
+square.draw();
+```
+
+##### 9.5.6. Implementation: C
+
+```C
+struct point2d {
+    uint32_t x, y;
+}
+```
+
+```C
+struct physics_object_ops {
+    void (*position)(const struct physics_object_ops **ops, struct point2d *out);
+}
+
+typedef const struct physics_object_ops ** physics_object_t;
+
+static inline void physics_object_position(const struct physics_object_ops **ops, struct point2d *out)
+{
+    (*ops)->position(ops, out);
+}
+```
+
+##### 9.5.7. Implementation: C : Server side objects
+
+```C
+struct server_circle {
+    struct point2d pos;
+    const struct physics_object_ops *ops;
+};
+
+static void server_circle_position(const struct physics_object_ops **ops, struct point2d *out)
+{
+    struct server_circle *server = CONTAINER_OF(ops, struct server_circle, ops);
+    printk("Server get position for circle.");
+}
+
+static const struct physics_object_ops _ops = {
+    .position = server_circle_position
+}
+
+void server_circle_init(struct server_circle *self)
+{
+    memset(self, 0, sizeof(*self));
+    self->ops = &circle_ops;
+}
+```
+
+- And similar implementation for square.
+
+##### 9.5.7. Implementation: C : Drawable interface
+
+```C
+struct drawable_ops {
+    void (*draw)(const struct drawable_ops **ops);
+}
+
+typedef const struct drawable_ops ** drawable_t;
+
+static inline void drawable_draw(const struct drawable_ops **ops) {
+    (*ops)->draw(ops);
+}
+```
+
+##### 9.5.8. Implementation: C : Client side objects
+
+```C
+struct client_circle {
+    physics_object_t server_object;
+    const struct drawable_ops *drawable;
+};
+
+void client_circle_draw(drawable_t ops)
+{
+    struct client_circle *self = CONTAINER_OF(ops, struct client_circle, drawable);
+    struct point2d pos = {0};
+    physics_object_position(self->server_object, &ops);
+    printk("CLient: draw circle at position\n");
+}
+
+static const struct drawable_ops _ops = {
+    .draw = client_circle_draw
+}
+
+void client_circle_init(struct client_circle *self, physics_object_t server_object)
+{
+    memset(self, 0, sizeof(*self));
+    self->server_object = server_object;
+    self->drawable = &_ops;
+}
+```
+
+- And similar implementation for square.
+
+##### 9.5.9. Implementation: C : Usage
+
+```C
+struct server_circle s_circle;
+struct server_square s_square;
+struct client_circle circle;
+struct client_square square;
+
+
+server_circle_init(&s_circle);
+server_square_init(&s_square);
+client_circle_init(&circle, &s_circle.ops);
+client_square_init(&square, &s_square.ops);
+
+drawable_draw(&circle.drawable);
+drawable_draw(&square.drawable);
+```
