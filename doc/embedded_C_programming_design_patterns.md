@@ -1999,3 +1999,20 @@ drawable_draw(&square.drawable);
 
 - **Adapter pattern**: more lightweight and it's primary use is to alter the interface of a class to suit user's needs. It's not a complete bridge thought and so lacks the ability to fully separate two hierarchies of objects.
 - **Strategy Pattern**: This pattern focuses on breaking out behaviors of objects and making them interchangeable. It is useful when you need to only have interchangeable behaviors where an object can be configured to use one behavior strategy or another. It can be considered as an alternative to the Bridge pattern when the implementation of an algorithm is the primary concern.
+
+#### 9.9. Quiz
+
+- 1. What is the main defining characteristic of the bridge pattern?
+  - Separate abstract interface code and implementation code by adding an hierarchy in both side to communicate (like libc and kernel, app and shared lib, two different machines via network).
+- 2. How does the bridge pattern decouple abstractions and implementations?
+  - Implement more hierarchy in abstraction side along with the hierarchy in implementations side.
+- 3. What is the role of abstraction in the bridge pattern?
+  - Can work separately and provide interface to client, and communicate with implementation via the bridge.
+- 4. What is the different bw bridge and abstract interface?
+  - Bridge require more step: add hierarchy an abstraction side to communicate with hierarchy in the implementation side.
+- 5. How can you use this pattern to simplify the sw architecture of your current project?
+  - Separate implementations and abstract interface.
+
+## IV. Behavior pattern
+
+### 10. Return value pattern
