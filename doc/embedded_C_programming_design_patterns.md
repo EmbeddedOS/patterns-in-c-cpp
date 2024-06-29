@@ -1983,3 +1983,19 @@ client_square_init(&square, &s_square.ops);
 drawable_draw(&circle.drawable);
 drawable_draw(&square.drawable);
 ```
+
+#### 9.6. Best practices
+
+- **Identify component hierarchies that need separation**: These should be largely independent hierarchies where the bridge pattern can truly simplify the interactions with objects on one side of the bridge.
+- **Define clear interfaces**: Since every interaction will pass through the abstract interfaces, it is important to have a well defined set of interfaces that will be implemented on the other side.
+- **Thorough testing**: encode all requirements into integration and system tests and make sure that you verify that the whole chain of command works as expected from one side of the bridge to the other.
+
+#### 9.7. Common pitfalls
+
+- **Over-engineering**: The bridge pattern should be used sparing and only when it is truly necessary to achieve complete separation of concerns, such as in the client server architecture scenarios.
+- **Complex interfaces**: the interface should be designed with the idea of providing `means, not policy`. The interface should be simple and generic and provide means of communication with implementations on the other side of the bridge without enforcing too many rules.
+
+#### 9.8. Alternatives
+
+- **Adapter pattern**: more lightweight and it's primary use is to alter the interface of a class to suit user's needs. It's not a complete bridge thought and so lacks the ability to fully separate two hierarchies of objects.
+- **Strategy Pattern**: This pattern focuses on breaking out behaviors of objects and making them interchangeable. It is useful when you need to only have interchangeable behaviors where an object can be configured to use one behavior strategy or another. It can be considered as an alternative to the Bridge pattern when the implementation of an algorithm is the primary concern.
