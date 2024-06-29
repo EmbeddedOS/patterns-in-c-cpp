@@ -2076,3 +2076,9 @@ int my_object_method(struct my_object *self)
 - **Zero means success**: If your function succeeds and does not require reporting partial success then always return 0.
 - **Partial success always uses positive numbers**: If your function requires partial success indication (such as number of items processed) then return this number as a positive integer.
 - **Use parameters for complex return values**: If you need to return a complex return value then simply return zero to indicate success and write this complex value into a structure pointed to by one of your function's parameters. Do not return complex structures as return values.
+
+#### 10.8. Pitfalls
+
+- **No clear definition of standard return values**: The most serious pitfall with return values is not defining their meaning. If every function returns values that can be potentially mixed up with other values then you can never really know what to expect. This is why we have adopted `errno` codes as standard way to indicate errors - because they are defined as macros and they are ubiquitous - they are available everywhere - they are standardized. This means we always can deduce what the problem may be looking at the `errno` code.
+
+- **Return structs**: When you need to return a struct, it is better to pass it as a parameter and them simply return an integer status code signaling whether the struct parameter was filled with valid data or not.
