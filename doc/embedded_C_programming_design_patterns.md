@@ -1281,3 +1281,259 @@ void button_do_something(struct button *self)
 - 5. Why do we use `CONTAINER_OF` to get our context and not just make the context global or pass it directly from the subject to the callback?
   - global means need to protect. Hard to see data flow.
   - pass direct means we can not have generic APIs for all callbacks. CONTAINER_OF help us to design a generic API with many behaviors.
+
+### 7. Inheritance Pattern
+
+#### 7.1. Defining characteristics
+
+- **Containment of base class**: our derived class simply contains data of its base class and uses base class methods to operate on that data. Derived object never references the base class data through a pointer.
+- **Derived object tightly coupled to base data**: The derived class directly access base class data even though we always try to use base class methods to manipulate base class, the inheritance pattern doesn't forbid direct access to base class data.
+- **Derived object must provide method wrappers**: If we want to manipulate base class data then we must always explicitly define derived object methods that would then either delegate this operation to base class method or modify the data directly. We never modify base class data directly.
+
+#### 7.2. Use cases
+
+- **Code reuse**: Whenever we need to `extend` the functionality of a base object, we can wrap it into a derived class and a derived interface around the base object - but we can still reuse the code that is part of the base object implementation.
+- **Generic data structures**: We use the inheritance pattern to create generic data structures such as lists in C. This allows us to reuse list manipulation functionality and even organize arbitrary structures into lists (as we have seen with the callback pattern) by simply `inheriting` from a list node. We can do the same when we implement many other data structures.
+- **Extending other objects**: through code reuse, we can create new data structures that have extended functionality which underneath use a base data structure but expose to the user a far richer interface than the original data structure.
+
+#### 7.3. Benefits
+
+- **Clean Design**: When we reuse the same functionality in many places it becomes easy to know what to expect when looking at the code. The opposite of this is re-implementing for example, the same list algorithms throughout many different objects in the firmware objects in the firmware - which leads to never knowing what to expect from such as implementation.
+- **Clear expectation**: We can think of our code much hierarchically and humans are far better at grasping hierarchical concepts than concepts that have many small details that need to be considered at the same time. If we structure our data hierarchically, we also create a software architecture that is very easy to grasp.
+- **Simple high level architecture**: through inheritance we can compartmentalize the logic at different levels of abstraction, leading to a much simpler design at the application level because we only need to deal with high level abstractions at that level.
+
+#### 7.4. Drawbacks
+
+- **Unnecessary code when wrapping methods**: If we want to fully inherit a data structure and expose a full interface to the user of that structure, we must also create wrappers for the base class methods in order to be able to use the structure in a clean way.
+- **Violation of encapsulation**: Inheritance by definition means that all the data of the base class automatically belongs to and can be modified by the deriving class. If the derived class directly accesses data of the base class then this can have unintended effects.
+- **Added complexity**: This is particularly true for virtual inheritance. Without automatic language features it becomes harder to keep things clean and consistent across the whole project because it places the responsibility on developers to follow design patterns.
+
+#### 7.5. Implementation
+
+- Very simple inheriting objects: `struct my_object` inherits two structures `struct base_one` and `struct base_two`.
+
+```C
+struct my_object {
+    struct base_one base_one;
+    struct base_two base_two;
+};
+```
+
+##### 7.5.1. Implementation: List Item type example
+
+```C
+struct _snode
+{
+    struct _snode *next;
+}
+
+typedef struct _snode sys_snode_t;
+
+typedef _slist {
+    sys_node_t *head;
+    sys_node_t *tail;
+};
+
+
+typedef struct _slist sys_slist_t;
+```
+
+- In the application code, we can inherit list item by simply embed the `sys_node_t` to user structure:
+
+```C
+struct my_object
+{
+    sys_node_t node;
+};
+
+sys_slist_t list;
+struct my_object obj1;
+struct my_object obj2;
+
+sys_slist_init(&list);
+sys_slist_append(&list, &obj1.node);
+sys_slist_append(&list, &obj2.node);
+```
+
+- So from now we can treat `my_object` like a list item.
+- Iterating the list:
+
+```C
+sys_snode_t *node;
+SYS_SLIST_FOR_EACH_NODE(&list, node)
+{
+    struct my_object *self = CONTAINER_OF(node, struct my_object, node);
+    //...
+}
+```
+
+##### 7.5.2. Implementation: Multiple inheritance
+
+- We have two base classes:
+
+```C
+struct base_one
+{
+    uint32_t x;
+};
+
+struct base_two
+{
+    uint32_t y;
+};
+
+void base_one_init(struct base_one *self)
+{
+    memset(self, 0, sizeof(*self));
+}
+
+void base_one_do_something(struct base_one *self)
+{
+
+}
+
+void base_two_init(struct base_one *self)
+{
+    memset(self, 0, sizeof(*self));
+}
+
+```
+
+- And in the derived classes:
+
+```C
+struct derived
+{
+    struct base_one base_one;
+    struct base_two base_two;
+}
+
+void derived_init(struct derived *self)
+{
+    base_one_init(&self->base_one);
+    base_two_init(&self->base_two);
+}
+
+void derived_do_something(struct derived *self)
+{
+    base_one_do_something(&self->base_one);
+}
+
+void main(void)
+{
+    struct derived derived;
+    derived_init(&derived);
+    derived_do_something(&derived);
+}
+```
+
+##### 7.5.3. Implementation: Traits and behaviors
+
+- Trait basically is a structure that do a specific characteristic of object.
+
+```C
+struct trait_x
+{
+    void (*do_x)(struct trait_x *self);
+}
+
+struct trait_y
+{
+    void (*do_y)(struct trait_y *self);
+}
+
+static inline void trait_x_do(struct trait_x *self)
+{
+    self->do_x(self);
+}
+
+static inline void trait_y_do(struct trait_y *self)
+{
+    self->do_y(self);
+}
+```
+
+##### 7.5.4. Implementation: Deriving Traits
+
+```C
+struct derived_with_traits
+{
+    struct trait_x trait_x;
+    struct trait_y trait_y;
+};
+
+static void derived_with_traits_do_x(struct trait_x *trait)
+{
+    struct derived_with_traits *self = CONTAINER_OF(trait, struct derived_with_traits, trait_x);
+    // So we can get derived class here with a base API.
+}
+
+static void derived_with_traits_do_y(struct trait_y *trait)
+{
+    struct derived_with_traits *self = CONTAINER_OF(trait, struct derived_with_traits, trait_y);
+    // So we can get derived class here with a base API.
+}
+
+void derived_with_traits_init(struct derived_with_traits *self)
+{
+    self-> trait_x = (struct trait_x) {
+        .do_x = derived_with_traits_do_x
+    };
+
+    self-> trait_y = (struct trait_y) {
+        .do_y = derived_with_traits_do_y
+    };
+}
+```
+
+- Using trait objects:
+
+```C
+void main(void)
+{
+    struct derived_with_traits dwt;
+    derived_with_traits_init(&dwt);
+
+    struct trait_x *dwx = &dwt.trait_x;
+    struct trait_y *dwy = &dwt.trait_y;
+    trait_x_do(dwx);
+    trait_y_do(dwy);
+}
+```
+
+#### 7.6. Best practices
+
+- **Always use Object Pattern**: This is a major prerequisite for being able to further clean up your architecture using inheritance. If your application is not currently using object pattern for organizing all variables then you have a hard time implementing clean inheritance as well.
+
+- **Understand the role of inheritance**: The primary role of inheritance is code reuse. The secondary role is to keep your functionality hierarchical so that it is easier to maintain.
+
+- **Use delegator methods**: When you need to access some data or functionality in the base class and this property can be considered a property of the derived class as well, create a derived class method and then simply delegate to the base class.
+
+- **Trait callbacks always static**: Always implement trait callbacks as static functions inside the implementation C file. This ensures that you not forget to update them when you make changes to your implementation.
+
+#### 7.7. Common pitfalls
+
+- **Fragile base class**: If changes to the base class alter the behavior of the derived class then it becomes specially important that you thoroughly verify the expectations you place on the derived class.
+
+- **Code duplication**: If you have base class methods and then you implement lots of wrappers in the derived class, you end up with many functions that just forward the call to another method of the derived class. This is essentially dead weight.
+
+- **Trying to implement inheritance before Object Pattern**: This is worth repeating multiple times: use the Object Pattern as much as possible and it is likely that the proper inheritance relationships will come into view naturally.
+
+#### 7.8. Alternatives
+
+- **Improving the base class**: sometimes it is better to simply add additional functionality to the base class rather than try to create a derived class. Inheritance in C should be used primarily in cases where you would like to combine several functionalities in a higher level object.
+- **Virtual API Pattern**: This pattern deals with fully abstract interfaces. The difference is that an abstract interface is a shared data structure that is always constant and shared between all instances of an object while a trait is a structure contained in each instance where the function pointers are not necessarily always constant. Virtual API is a more robust and memory efficient way to implement pure virtual functions in C.
+- **Facade Pattern**: Since C language doesn't naturally provide a syntax for separating inheritance from composition, many patterns look similar in their implementation. A pattern where an object inherits functions and then delegates the calls to a base class may look very similar to a facade. The difference is in the intent (the intent of a Facade is to simplify the interface which is not the same as the intent of direct delegation).
+
+#### 7.9. Quiz
+
+- 1. What are the main reasons for using inheritance in your software architecture?
+  - **Re-use** source code of base object, can make various derived objects.
+- 2. How is multiple inheritance pattern implemented in C and what naming convention is it good to use when naming your methods to make this easier to maintain?
+  - Include more objects in the derived class, define more wrapper APIs, traits and behaviors.
+- 3. What are the benefits of using traits and how do they relate to multiple inheritance?
+  - Flex behavior of objects.
+  - Trait object just contains function pointers that represent operations that corresponding to a particular `trait`.
+- 4. What main drawback do traits have when they embedded into the derived struct compared to pure virtual interfaces which are constant and only referenced from the derived struct though a pointer to the interface?
+  - More wrapper functions.
+  - Don't have generic interface.
