@@ -2152,3 +2152,14 @@ int my_object_method(struct my_object *self)
 - **Interrupts only for loading hardware**: use interrupts only for operating on prepared data that needs to either be pumped out through the hardware or data needs to be received from hardware and placed into a prepared buffer. Interrupts are not for application logic. Interrupts must only operate on the premise of responding to a hardware event and quickly preparing next operation if appropriate. If your task is above the lowest level of abstraction (ie a GPIO operating over an I2C gpio expander) then you need to defer this work into the system work queue or another thread.
 
 - **Utilize system work queue**: The system work queue provides a way of queuing cooperative blocks of operations which are then executed in sequence as part of the work queue thread loop. You can queue work from interrupts or from other threads. This is an excellent way to avoid creating unnecessary threads in your application.
+
+### 11.6. Common pitfalls
+
+- **Do not reinvent the scheduler**: You should be using an existing scheduler/RTOS like Zephyr. Do not try to invent your own scheduling. This problem has been thoroughly solved many many times since the concept first appeared in 1980. Any solution that you implement yourself will be a nightmare to maintain.
+- **Do not use threads as level of abstraction**: One of the worst misuses of software concurrency is using thread as ways of `layering abstractions`. For example, you have a UART `low level thread` which reads characters and places lines into a queue. Then you have your main app thread reading from that `line queue`. This is abstraction layering and it is almost always a mistake. The intermediate thread is completely unnecessary and just wastes resources. Threads are for **Time domain separation** - Not for layering abstraction.
+
+### 11.7. Alternatives
+
+- **Interrupt Driven Concurrency**: You have seen how the interrupt controller already provides us with a way of nesting tasks of different priorities. Since concurrency can thus be achieved using only the interrupt controller. However, such concurrency is extremely limited because it does not give use a way to jump to an arbitrary location at any given time.
+
+- **State machines**: Run to completion state machines are another approach. This approach can used together with conventional threading in order to create more reliable software because a state machine can be mathematically proven. The biggest drawback is that state machines need to run to completion. Preemption is only possible if you have a conventional scheduler as well.
