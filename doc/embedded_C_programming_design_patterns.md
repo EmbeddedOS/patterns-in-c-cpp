@@ -2163,3 +2163,17 @@ int my_object_method(struct my_object *self)
 - **Interrupt Driven Concurrency**: You have seen how the interrupt controller already provides us with a way of nesting tasks of different priorities. Since concurrency can thus be achieved using only the interrupt controller. However, such concurrency is extremely limited because it does not give use a way to jump to an arbitrary location at any given time.
 
 - **State machines**: Run to completion state machines are another approach. This approach can used together with conventional threading in order to create more reliable software because a state machine can be mathematically proven. The biggest drawback is that state machines need to run to completion. Preemption is only possible if you have a conventional scheduler as well.
+
+### 11.8. Quiz
+
+- 1. What is the main reason that interrupt based concurrency is not enough for having full flexibility when writing higher level applications? What limitations does it have?
+  - Interrupt only can jump to another upon receiving an event.
+  - Interrupt context is different, and we can have many kind of application to run concurrency.
+  - Interrupt should be used for hardware event or high priority task.
+  - Interrupt should quick.
+- 2. How does software concurrency enable you to make the most use of your CPU without requiring major changes to your code structure and software architecture?
+  - Allow you to jump to another code.
+- 3. How would you typically structure your priorities for maximum flexibility?
+  - Same priority for app threads.
+- 4. What happens to an interrupt handler if another lower priority interrupt is triggered?
+  - nothing happen.
