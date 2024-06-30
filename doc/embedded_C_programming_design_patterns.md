@@ -2098,5 +2098,30 @@ int my_object_method(struct my_object *self)
   - negative number that follow errno.
 - 3. Why is it not a good idea to forward a return status from function you have called and return it without changes?
   - No one want to handle them?
+  - Make the error code non-constant.
 - 4. When should you return a positive status code?
   - number of affected items.
+
+## V. Concurrency Pattern
+
+### 11. Concurrency Pattern
+
+- The pattern we do when we want to control what each CPU do next.
+
+### 11.1. Defining characteristics
+
+- **Scheduler**: this is the code that has a higher level view over what the CPU is doing and is able to direct the CPU to run any other portion of the software.
+- **Hardware Support**: The scheduler almost always relies on hardware timers to drive it. The hardware is a very important aspect in concurrency which must be taken into account since at the core it is always the hardware that makes scheduling possible.
+- **Synchronization**: This consists of software constructs that can be used in the application to control what the scheduler will do next. These consist of spinlock, semaphores, mutexes, condition variables and other higher level concepts.
+
+### 11.2. Use Cases
+
+- **Parking CPU while waiting for IO**: If our calculation requires an IO value that is not available yet (availability can be signalled using an electrical signal). In such a scenario it is a good idea to load the CPU with a different state and let other calculations happen while we are waiting.
+
+- **Concurrent hardware operations**: Each peripheral on a SoC is an independent hardware unit driven by a shared clock. This hardware unit can do things independently of other hardware units. However, to make use of this functionality we need a way to jump between multiple code paths that execute operations in sequence on each piece of hardware. We need concurrency in order to do this.
+
+- **Multiple CPU cores**: We need concurrency in software when we have multiple cores that can access the same peripherals (or memory) and we need ways to synchronize this access in software.
+
+- **Real-time timing constraints**: We need our software to respond to events very quickly and we want to be able to start complex chains of software events when a hardware occurs. We need concurrency in order to switch contexts quickly in response to hardware events without the need of running some code to completion.
+
+### 11.3. Benefits
