@@ -2310,13 +2310,14 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
 #### 12.9. Quiz
 
 - 1. What main problem is spinlock designed to solve?
-  - protect critical section, only one person can access at a time in all system.
+  - protect critical section, only one person can access at a time in all system: Hardware interrupts, process, threads, etc. all of them.
 - 2. Why in spinlock we have to disable the interrupt first after that acquire the lock?
-  - we disable int to make sure no context switch first and after that acquire the lock. Also, because the lock is taken by another CPU, so if you don't maybe the interrupt still happen when you acquire the lock.
+  - we disable int to make sure no context switch first and after that acquire the lock. Also, because the lock is taken by another CPU, so if you don't, maybe the interrupt still happen on your CPU when you acquire the lock.
 - 3. Why we need to save the interrupt state before disable into a variable in stack?
-  - because we still need system running like normal when we unlock. And when we disable, interrupt states are cleared.
+  - because we don't know that the state maybe is disabled before, so we cache the state to make sure we don't enable them incorrectly.
+  - We want allow multiple spin-locks to be held at the same time.
 - 4. Why never call function in critical sections?
-  - Taken more time.
+  - Taken more time, call another lock, etc.
 - 5. What operations does locking and unlocking a spinlock essentially translate into a single core system?
   - Disable interrupt is enough.
 - 6. Is it fine to lock another spinlock in holding a different lock?
