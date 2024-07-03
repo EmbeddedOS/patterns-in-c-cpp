@@ -2261,7 +2261,8 @@ void main(void)
 
 - **Locking Interrupts**: This solves the concurrent data access problem between exceptions and lower priority code just like before.
 - **Atomic compare-and-swap (CAS)**: This operation is used inside an infinite loop to compare a variable to an expected value and set it only if the comparison is successful. If comparison is unsuccessful then the code loops and retries the same operation until it succeeds.
-  - Means one CPU success, another CPU will failure if try to lock also.
+  - Means one CPU success, another CPU will failure if try to CAS the atomic var also.
+  - We just need this in SMP system.
 
 ```C
 struct k_spinlock {
@@ -2275,6 +2276,9 @@ static ALWAYS_INLINE k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
 
     k.key = arch_irq_lock();
 
+    // Only needed on SMP systems. Compare `locked` to 0 and if true set to 1
+    // and return previous value (0).
+    // CAS is implemented using atomic CPU instruction.
     while (!atomic_cas(&l->locked, 0, 1));
 
     return k;
