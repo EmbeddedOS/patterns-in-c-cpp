@@ -2177,3 +2177,113 @@ int my_object_method(struct my_object *self)
   - Same priority for app threads.
 - 4. What happens to an interrupt handler if another lower priority interrupt is triggered?
   - nothing happen.
+
+### 12. Spinlock pattern
+
+- Primary way of synchronization between interrupt handlers and layers above. Synchronization between multiple CPUs.
+- On top of this pattern, we can build concurrency pattern like: semaphore, mutexes, condition variables.
+- Understand this pattern help you understand how other concurrency primitives work, because they all use the spinlock at the bottom.
+
+#### 12.1. Defining characteristics
+
+- **Atomic variable**: This variable is used together with a set of special atomic operations to ensure that it can only be set by a single core at any given time.
+- **Tight loop while locked**: This is only used when we want our code to support safe execution on a multiprocessor system. This mechanism loops on an atomic variable. We loop until we are able to atomically set the variable when it was previously zero (atomic compare and swap).
+- **Interrupt masking**: we then disable interrupts and store the previous state of the interrupts in a variable called `key`. This allows spinlock to be locked recursively without any issues (interrupts are only enabled when the first spinlock is unlocked and the key is restored - we will look at how this works in this module).
+
+#### 12.2. Use cases
+
+- **Data access synchronization with interrupts**: Any code that needs to access the same data that is also accessed by an interrupt handler must disable at least that interrupt handler before accessing the data. Spinlock provides a generic mechanism to do this.
+- **Multi-core synchronization**: In a multi-core system, an interrupt can executed by any one of the cores. Atomic operations together with a memory barrier are the only way to ensure that a certain memory location is only modified by a single core and no other code. Spinlock provides a standard mechanism for achieving this kind of synchronization.
+
+#### 12.3. Benefits
+
+- **Generalized Approach**: This minimizes potential bugs specially in multi-core systems and ensures that all locking is agnostic with regards to number of cores in the system.
+- **Extremely lightweight**: The spinlock algorithm is very lightweight. In fact, on a single core system you can simple omit the looping part and then it simply translates to locking/unlocking of interrupts (but you still retain the possibility of building your code for a multi-core system without having to chase down every place where you disable interrupts).
+- **Usable in interrupt handlers**: The spinlock can be used in interrupts to disable higher priority interrupts and also to synchronize between more than once core - making it useful for synchronization even between interrupt handlers as well (although interrupts should not share data).
+
+#### 12.4. Drawbacks
+
+- **No concept of threads**: A spinlock is very simple mechanism which has no concept of threads. Unlike mutex, a spinlock has no possibility to redirect execution to another thread once it is unlocked. It is simply a mechanism to synchronize data access between code and actions called directly by hardware (the interrupt handlers).
+- **Disable Interrupts**: This is both a feature and also potential problem because when a single spinlock is held, NO other code can interrupt the critical section. This is because all interrupts are disabled and all events are held back until the spinlock is released. This means that under no circumstances should you ever hold a spinlock longer than necessary synchronize data access (lock data - not code).
+
+#### 12.5. Implementation
+
+- **Global Interrupt mask**: On ARM architecture this is called `PRIMASK` and it's a signal that controls whether exceptions are enabled at all. We can disable exception handling at any time using special CPU instructions. Any exceptions that occur while exceptions are disabled will be handled once exceptions are enabled again if they are still pending by then.
+- **Interrupt Priorities**: Each interrupt can be configured with a priority. Value of zero is highest priority and then as the priority number increases we get the `turn` at which a particular interrupt will be handled. If an exception has priority number 3 then its turn to run is only after exceptions with priority numbers lower than 3 have been handled.
+- **Base priority**: On ARM this is called `BASEPRI`. This is a setting that allows us to disable exception handling of exceptions with the same or lower priority than the base priority. This allows disabling of non-system interrupts while allowing other time critical interrupts to occur (with certain limitations of course as to what the interrupt handler is allowed to do in such scenario). Setting base priority to zero value disables it.
+
+##### 12.5.1. Disabling interrupts
+
+```C
+static ALWAYS_INLINE unsigned int arch_irq_lock(void)
+{
+    unsigned int key;
+
+    __asm__ volatile("mrs %0, PRIMASK;"
+        "cpsid i"
+        : "=r" (key)
+        :
+        : "memory");
+
+    return key;
+}
+
+```
+
+##### 12.5.2. Sharing data with ISR
+
+```C
+struct data {
+    int foo;
+}
+
+static struct data data;
+
+void interrupt_routine(void)
+{
+    data.foo += 5;
+}
+
+void data_user_code(struct data *self)
+{
+    int tag = arch_irq_lock();
+    self->foo += 8;
+    irq_unlock(tag);
+}
+
+void main(void)
+{
+    data_user_code(&data);
+}
+```
+
+##### 12.5.3. Spinlock
+
+- **Locking Interrupts**: This solves the concurrent data access problem between exceptions and lower priority code just like before.
+- **Atomic compare-and-swap (CAS)**: This operation is used inside an infinite loop to compare a variable to an expected value and set it only if the comparison is successful. If comparison is unsuccessful then the code loops and retries the same operation until it succeeds.
+  - Means one CPU success, another CPU will failure if try to lock also.
+
+```C
+struct k_spinlock {
+    // Only needed on multiprocessor systems.
+    atomic_t locked;
+}
+
+static ALWAYS_INLINE k_spinlock_key_t k_spin_lock(struct k_spinlock *l)
+{
+    k_spinlock_key_t k;
+
+    k.key = arch_irq_lock();
+
+    while (!atomic_cas(&l->locked, 0, 1));
+
+    return k;
+}
+
+static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
+{
+    atomic_clear(&l->locked);
+
+    arch_irq_unlock(key.key);
+}
+```
