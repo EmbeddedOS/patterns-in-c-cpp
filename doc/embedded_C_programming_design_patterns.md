@@ -2291,3 +2291,8 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
     arch_irq_unlock(key.key);
 }
 ```
+
+#### 12.6. Best practice
+
+- **Use spin-locks even on bare-metal**: even if you are doing bare metal development without an RTOS, spinlock is a valuable abstraction that makes your code more robust. You can easily port spin-lock based ode to a system with multiple cores to a system that uses an RTOS - as long as your spin-lock implementation itself is portable.
+- **Lock data, not code**: this is a central rule that is especially important with spin-locks because they delay handling of all incoming events. The critical section locked by a spinlock should be very small and only contain memory operations and preferably no calls to other functions.
