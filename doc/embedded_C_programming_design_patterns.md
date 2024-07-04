@@ -2306,3 +2306,23 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
 
 - **Raw interrupt disable**: This works for only single core system. in SMP you have to implement spinlock.
 - **Scheduler locking**: Not protect you from interrupt code, but protect you from context switching, so if you only care about multi thread issue, just disable this.
+
+#### 12.9. Quiz
+
+- 1. What main problem is spinlock designed to solve?
+  - protect critical section, only one person can access at a time in all system.
+- 2. Why in spinlock we have to disable the interrupt first after that acquire the lock?
+  - we disable int to make sure no context switch first and after that acquire the lock. Also, because the lock is taken by another CPU, so if you don't maybe the interrupt still happen when you acquire the lock.
+- 3. Why we need to save the interrupt state before disable into a variable in stack?
+  - because we still need system running like normal when we unlock. And when we disable, interrupt states are cleared.
+- 4. Why never call function in critical sections?
+  - Taken more time.
+- 5. What operations does locking and unlocking a spinlock essentially translate into a single core system?
+  - Disable interrupt is enough.
+- 6. Is it fine to lock another spinlock in holding a different lock?
+  - Yes for different spinlock but no for another type of lock, maybe deadlock.
+- 7. Why should you this pattern even your system have only one core?
+  - Abstract the lock mechanism, save interrupt state.
+- 8. Why it is wrong when compare spinlock with `thread aware` primitives?
+  - spinlock pause all system don't care about thread, process, interrupt.
+  - `thread aware` primitives, maybe just locking another threads, process that acquire same lock.
