@@ -2471,3 +2471,15 @@ out:
 - **Give in one thread, take in another**: one of the best guiding factors for use of semaphore is asking the question: **Will I always take it in one thread and give it in another**? If this is not the case and you need to both take and give. as part of same sequence then it is a signal to you that you are trying to do mutual exclusion and should therefore consider a spinlock or a mutex depending on whether it should be thread aware or not. However, if you are signalling between different context/threads then the favor falls on the semaphore instead.
 - **Use for resource management**: You can use spinlock for mutual exclusion to a data variable (like a queue) and a semaphore to signal threads that there is work to be done. Thus giving a semaphore from a critical section guarded by a spinlock will defer the time when a thread will wake up in response to the semaphore until the critical section ends (i.e. spinlock is unlocked).
 - **Avoid circular dependencies**: you must avoid a scenario where two threads may end up waiting on each other's semaphores. If this happens then both threads will lock up - this situation is referred to as a `deadlock`.
+
+#### 13.8. Common pitfalls
+
+- **Priority Inversion**: This is a situation that occurs when a low priority thread holds a resource busy that a high-priority thread needs - causing the high priority thread to be blocked. Mutexes avoid this through priority inheritance but semaphores do not have this ability due to simple design and different use case.
+- **Deadlock**: This situation can occur when multiple semaphores are used to control access to a shared resource and there is a circular dependency between them. The best way to avoid this is to always give and take multiple semaphores in the same sequence order.
+
+- **Semaphore never given**: This can occur for example if a semaphore is given from an interrupt - but is only given if some condition is true. Suppose an interrupt only signals if transfer was successfully but does not signal if transfer has an error. Thus a thread waiting for an operation to complete will never be unblocked and will never continue because the semaphore was never given. Such problems are sometimes not easy to debug - the best way to prevent them is to fully unit test all code paths through your interrupt handlers making sure that the semaphores are given correctly along all paths.
+
+#### 13.9. Alternative
+
+- **Condition variables**: There are more complex patterns which can be used to signal many threads at once (i.e they are all woken up before picking which one should run next).
+- **Mutexes**: This pattern is used primarily for mutually exclusive access to a resource between threads. A mutex must be given in the same thread that has acquired it - thus mutexes can not be used for signalling between threads.
