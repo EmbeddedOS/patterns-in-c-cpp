@@ -2522,3 +2522,13 @@ out:
 - **Mutual exclusive access**: The mutex is primarily designed to ensure scalable mutually exclusive access to resources that can be shared between OS threads. It ensures that only one thread can have access to a resource while the mutex is locked. Trying to acquire a mutex from an interrupt is invalid.
 
 - **Thread safety**: When we talk about thread safety of an API, we usually refer to the ability of multiple threads to share the object which the API operates on when calling the functions defined by the API. This thread safety is typically implemented as mutual exclusion using a separate mutex for each instance of the object. This allows each instance of an object to be safety accessed in a mutually exclusive fashion by multiple threads.
+
+#### 14.3. Benefits
+
+- **Priority inversion avoidance**: Unlike the semaphore pattern, the mutex implements the much needed priority inheritance making sure that highest priority threads in an application do not need to depend on lower priorities of other threads when they contend with these threads for the same resource.
+- **Ease of use**: A mutex explicit checks whether it is being locked and unlocked by the same thread providing extra level of debugging provided that it is used as intended for simple locking and unlocking around operations that perform data access to shared data.
+
+#### 14.4. Drawbacks
+
+- **Single Resource Only**: Compared to a semaphore, a mutex does not provide a counter like the semaphore does. The internal counter of a mutex is only used for keeping tracking of recursive locks done by the same thread that locked the mutex when it was still unlocked.
+- **Threads only**: Mutex is by definition unsuitable for use in interrupts and for any kind of synchronization with hardware since it is implemented for thread only usage and expects to keep track of the owner thread and since it needs to know the owner thread of the mutex in order to handle priority inheritance. Therefore mutex can not be used when trying to synchronize access to a variable between a thread and an interrupt. In such a scenario, a spinlock should be used instead.
