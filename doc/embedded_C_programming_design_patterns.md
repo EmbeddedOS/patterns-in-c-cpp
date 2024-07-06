@@ -2360,3 +2360,103 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
 - **No priority boosting**: If a high priority thread tries to take a semaphore that has been taken by a low priority thread, the low priority thread will not be boosted in priority in order to complete faster. Generally a semaphore should therefore never be used for mutual exclusion between threads - only for signalling.
 
 - **Not suitable for mutual exclusion**: design decisions of a semaphore are not compatible with design decisions of a mutex. Use mutex instead for mutual exclusion.
+
+#### 13.5. Implementation
+
+```C
+struct some_device {
+    struct k_sem done;
+};
+
+// This will be called asynchronous by hardware.
+static void some_device_isr(void)
+{
+    struct some_device *self = &_instance_of_device;
+    // Check whether transmission is completed.
+    // ...
+    // Signal that operation is done.
+    k_sem_give(&self->done);
+}
+
+void some_device_transmit(struct some_device *self,
+                            const void *data,
+                            size_t size)
+{
+    // (1) load device registers.
+    // ...
+    // (2) suspend this function until operation is done.
+    k_sem_take(&self->done);
+
+    // (3) continue and return only once the operation is done.
+    // ...
+}
+```
+
+##### 13.5.1. Giving a semaphore implementation
+
+```C
+void z_impl_k_sem_give(struct k_sem *sem)
+{
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    struct k_thread *thread;
+
+    // Get the first thread in the queue to mark as ready.
+    thread = z_unpend_first_thread(&sem->wait_q);
+    if (thread != NULL)
+    {
+        arch_thread_return_value_set(thread, 0);
+        z_ready_thread(thread);
+    }
+    else
+    {
+        // If no one in the queue we just increase the semaphore counter.
+        sem->count += (sem->count != sem-> limit) ? 1U : 0U;
+
+        // Polling on semaphore to wait for some event.
+        handle_poll_events(sem);
+    }
+
+    // Yield scheduler to run the next pending task. We pass the lock to scheduler to make sure it unlock the spinlock and then perform context switch. That make sure the waiting task will be run ASAP.
+    // This also pend if you are in interrupt context (cannot context switch).
+    z_reschedule(&lock, key);
+}
+```
+
+##### 13.5.2. Taking a semaphore implementation
+
+```C
+int z_impl_k_sem_take(struct k_sem *sem, k_timeout_t timeout)
+{
+    int ret = 0;
+
+    // Make sure timeout is set to K_NO_WAIT. Because this doesn't make sense, if we sleep at a interrupt handler, it actually is in valid.
+    // It will pass if we are not in ISR or timeout == K_NO_WAIT.
+    // Or failure if we are in ISR and timeout != K_NO_WAIT.
+    // So if you want to call sem_take() in interrupt, make sure you use K_NO_WAIT.
+    __ASSERT(((arch_is_in_isr() == false) ||
+        K_TIMEOUT_EQ(timeout, K_NO_WAIT)), "");
+
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    if (likely(sem->count > 0U))
+    { // We decrease the count.
+        sem->count--;
+        k_spin_unlock(&lock, key);
+        ret = 0;
+        goto out;
+    }
+
+    if (K_TIMEOUT_EQ(timeout, K_NO_WAIT))
+    { // User don't want to wait, so we return immediately: EBUSY.
+        k_spin_unlock(&lock, key);
+        ret = -EBUSY;
+        goto out;
+    }
+
+    // Semaphore is not available, this function mark thread like sleeping and add to the wait queue.
+    ret = z_pend_curr(&lock, key, &sem->wait_q, timeout);
+    // This will return to run when this thread can take this sem.
+
+out:
+    return ret;
+}
+```
