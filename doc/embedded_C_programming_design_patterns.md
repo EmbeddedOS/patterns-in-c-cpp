@@ -2621,3 +2621,60 @@ int k_mutex_lock(struct k_mutex *mutex, k_timeout_t timeout)
 ```
 
 ##### 14.5.3. Unlocking a mutex
+
+```C
+int k_mutex_unlock(struct k_mutex_ *mutex)
+{
+    struct k_thread *new_owner;
+    __ASSERT(!arch_is_in_isr(), "Mutexes cannot be used inside ISRs");
+
+    CHECKIF((mutex->owner == NULL)) {
+        return -EINVAL;
+    }
+
+    /* Not owner cannot unlock. */
+    CHECKIF((mutex->owner != _current)) {
+        return -EPERM;
+    }
+
+    /*
+     * Attempt to unlock a mutex which is unlocked, mutex->lock_count cannot be
+     * zero if the current thread is equal to mutex->owner, therefore no
+     * underflow check is required. Use assert to catch undefined behavior.
+     */
+    __ASSERT_NO_MSG(mutex->lock_count > 0U);
+
+    if (mutex->lock_count > 1U)
+    { // The user can call lock() more than one, so we just decrease the count.
+        mutex->lock_count--;
+        goto k_mutex_unlock_return;
+    }
+
+    k_spinlock_key_t key = k_spin_lock(&lock);
+
+    /* Revert back current owner thread priority. */
+    adjust_owner_prio(mutex, mutex->owner_orig_prio);
+
+    /* Get the new owner from the pend queue, if any. */
+    new_owner = z_unpend_first_thread(&mutex->wait_q);
+    mutex->owner = new_owner;
+    if (new_owner != NULL)
+    {
+        /* Transfer the mutex to the new owner. */
+        mutex->owner_orig_prio = new_owner->base.prio;
+        arch_thread_return_value_set(new_owner, 0);
+        z_ready_thread(new_owner);
+
+        /* Reschedule with new priority. */
+        z_reschedule(&lock, key);
+    } else
+    {
+        /* Don't have new owner, we just reset counter and return. */
+        mutex->lock_count = 0U;
+        k_spin_unlock(&lock, key);
+    }
+
+k_mutex_unlock_return:
+    return 0;
+}
+```
