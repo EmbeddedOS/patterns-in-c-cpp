@@ -2349,3 +2349,14 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
 - **Signal between threads**: Just like we can signal between interrupts, we can also use semaphores to signal between threads. we can have one thread attempt to take a semaphore and be placed to sleep if this was not successful. Then another thread can give the semaphore and the semaphore will wake up the waiting thread and pend a context switch. The scheduler will then run the waiting thread at the first opportunity where it makes sense - i.e if the waiting thread is lower priority than the currently running thread then it will have to wait - otherwise it will be waken up right away.
 
 - **Waking up a thread pool**: We can have multiple threads waiting on a counting semaphore and once we give that semaphore, we would be waking up one thread. Thus we can give the semaphore multiple times to wake up more than one thread. The worker thread would then perform some action after taking the semaphore and then attempt to take it again. If there is more work to do then it will successfully proceed or otherwise be put to sleep. Note however, that all threads are not woken up atomically - only one at a time. For atomic wake up of multiple threads you can use broadcasting feature of condition variable pattern.
+
+#### 13.3. Benefits
+
+- **Very lightweight**: The semaphore is very lightweight compared to other thread aware synchronization primitives. It's main purpose is to pend current thread until semaphore becomes available and then wake up the highest priority thread in response to the semaphore becoming available. There is no complex logic beyond.
+- **Usable from interrupt handlers**: semaphores are the simplest and most lightweight. way of sending a signal from an interrupt handler to an application thread. Mutexes can not be used in interrupt handlers and work queues are more memory intensive when used to defer work from interrupts.
+
+#### 13.4. Drawbacks
+
+- **No priority boosting**: If a high priority thread tries to take a semaphore that has been taken by a low priority thread, the low priority thread will not be boosted in priority in order to complete faster. Generally a semaphore should therefore never be used for mutual exclusion between threads - only for signalling.
+
+- **Not suitable for mutual exclusion**: design decisions of a semaphore are not compatible with design decisions of a mutex. Use mutex instead for mutual exclusion.
