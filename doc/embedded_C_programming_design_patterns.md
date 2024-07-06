@@ -2689,3 +2689,20 @@ k_mutex_unlock_return:
 
 - **Deadlock**: different mutex lock each other.
 - **Thread Starvation**: holding the mutex for longer than necessary causing other threads to be delayed.
+
+#### 14.8. Alternatives
+
+- **Semaphore**: Use a semaphore when your use case requires locking to happen in one thread and unlocking to happen in a different thread. This is a case of signaling and so a semaphore is better suited than a mutex.
+- **Condition variable**: condition variable provides a way to unlock a mutex while waiting for a condition to become true. It is useful when you are waiting for one or more events and would like to do so without keeping a resource looked.
+
+#### 14.9. Quiz
+
+- 1. Why is it illegal to lock/unlock the mutex from interrupt handler? what key functionality does this design choice make possible?
+  - mutex is interrupt-unaware, and manage thread owner to avoid priority inversion problems. And only owner thread can unlock.
+- 2. Why is it case that a mutex can not be locked by one thread and unlocked by another? What implications would it have and what key functionality of the mutex would be impossible to implement if this was allowed?
+  - Mutex use the thread owner to avoid priority inversion problem.
+- 3. What happens to a lower priority thread if it is holding the mutex and is currently suspended when a higher priority thread tries to acquire the same mutex? When does the lower priority thread get to run again?
+  - the lower priority thread will be adjust priority to equal with the higher priority thread.
+  - It's will be run in the next schedule.
+- 4. If multiple mutexes are locked/unlocked, in what sequence should these mutexes be locked/unlocked to avoid deadlock?
+  - Don't lock another mutex when you are locking other one.
