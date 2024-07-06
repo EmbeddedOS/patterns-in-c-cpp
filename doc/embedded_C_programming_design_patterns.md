@@ -2504,3 +2504,21 @@ out:
   - Without queue priority, the first thread will be pop from queue.
 - 7. When does CPU switch to awakened thread when a semaphore is given from an interrupt handler?
   - the waiting thread will be push to the pending task to run, so scheduler will run to it by order in the pending queue.
+
+### 14. Mutex Pattern
+
+- Mutual exclusion for shared data access between threads.
+
+#### 14.1. Definition characteristics
+
+- **Lock/Unlock**: These are two main operations that can be performed on a mutex. `Lock` attempts to acquire an exclusive lock on the mutex. `Unlock` release the lock and wakes up next thread that was waiting for it.
+- **Mutual exclusion**: guaranteed mutual exclusion between threads. One thread on any CPU has is allowed to hold the same mutex at any given time.
+- **Does not disable interrupts**: Unlike spinlock, the mutex is not aware of interrupts and does not hold interrupts disabled while mutex is locked. The system can still process interrupts and respond to hardware events as normal.
+- **Maintains thread queue**: the mutex also maintains a thread queue just like the semaphore, but unlike the semaphore, the mutex also implements priority inheritance for threads that currently hold the mutex so that can inherit a higher priority if another thread with a higher priority also tries to acquire the mutex.
+- **Recursive locking is allowed by same thread**: The same thread can try to lock the same mutex twice without any issues. The mutex is thread aware and knows about the owner that is currently holding the mutex. Thus the same thread can call other functions that also try to lock the mutex while keeping the mutex locked without any issues.
+
+#### 14.2. Use cases
+
+- **Mutual exclusive access**: The mutex is primarily designed to ensure scalable mutually exclusive access to resources that can be shared between OS threads. It ensures that only one thread can have access to a resource while the mutex is locked. Trying to acquire a mutex from an interrupt is invalid.
+
+- **Thread safety**: When we talk about thread safety of an API, we usually refer to the ability of multiple threads to share the object which the API operates on when calling the functions defined by the API. This thread safety is typically implemented as mutual exclusion using a separate mutex for each instance of the object. This allows each instance of an object to be safety accessed in a mutually exclusive fashion by multiple threads.
