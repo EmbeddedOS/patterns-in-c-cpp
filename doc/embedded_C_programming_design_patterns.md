@@ -2532,3 +2532,92 @@ out:
 
 - **Single Resource Only**: Compared to a semaphore, a mutex does not provide a counter like the semaphore does. The internal counter of a mutex is only used for keeping tracking of recursive locks done by the same thread that locked the mutex when it was still unlocked.
 - **Threads only**: Mutex is by definition unsuitable for use in interrupts and for any kind of synchronization with hardware since it is implemented for thread only usage and expects to keep track of the owner thread and since it needs to know the owner thread of the mutex in order to handle priority inheritance. Therefore mutex can not be used when trying to synchronize access to a variable between a thread and an interrupt. In such a scenario, a spinlock should be used instead.
+
+#### 14.5. Implementation
+
+- We use spinlock to guarantee access to the internal mutex data structure.
+
+##### 14.5.1. Mutex mechanics
+
+- If the mutex is locked then current thread id is stored as owner of the mutex and the locking function returns success.
+- If the mutex is already locked by another thread and we try to acquire it, then the current thread is added to a wait queue inside the mutex object and its state is suspended.
+- If the mutex is already held by a lower priority thread, the holding thread's priority is adjusted the the priority of the current thread which is trying to acquire the mutex.
+- If there are threads in the wait queue of the mutex then the highest priority thread is picked, its state is set to `ready` and the scheduler is called to switch context directly to that thread.
+
+##### 14.5.2. Locking a mutex
+
+```C
+// There is a global spinlock for all mutexes.
+static struct k_spinlock lock;
+
+int k_mutex_lock(struct k_mutex *mutex, k_timeout_t timeout)
+{
+    int new_priority;
+    k_spinlock_key_t key;
+    bool reschedule = false;
+
+    __ASSERT(!arch_is_in_isr(), "mutexes cannot be used inside ISRs");
+    key = k_spin_lock(&lock);
+
+    /* The mutex state is unlock or current owner call lock() twice. */
+    if (likely((mutex->lock_count == 0U) || (mutex->owner == _current)))
+    {
+        /* If the first time call, we init the mutex priority. */
+        mutex->owner_orig_prio = (mutex->lock_count == 0U) ?
+                                _current->base.prio :
+                                mutex->owner_orig_prio;
+        mutex->lock_count++;
+        mutex->owner = _current;
+
+        k_spin_unlock(&lock, key);
+        return 0;
+    }
+
+    // ...
+
+    if (unlikely(K_TIMEOUT_EQ(timeout, K_NO_WAIT)))
+    { // User want to lock with timeout is NO_WAIT (try_lock()). We return immediately because it's lock state by other thread.
+        k_spin_unlock(&lock, key);
+        return -EBUSY;
+    }
+
+    /* Get the priority of current owner thread and compare with caller thread. If caller thread have higher priority, we adjust owner equal with it. */
+    new_prio = new_prio_for_inheritance(_current->base.prio,
+                mutex->owner->base.prio);
+
+    if (z_is_prio_higher(new_prio, mutex->owner->base.prio))
+    {
+        reschedule = adjust_owner_prio(mutex, new_prio);
+    }
+
+    /* Put thread onto the wait queue with timeout. */
+    int got_mutex = z_pend_curr(&lock, key, &mutex->wait_q, timeout);
+    if (got_mutex == 0)
+    { // If successful, the caller can got the mutex so we return.
+        return 0;
+    }
+
+    // ...
+
+    /* Handle case we can not get the mutex and timed out.
+     * We have to reverse back priority if the caller cannot get mutex. */
+    key = k_spin_lock(&lock);
+    struct k_thread *waiter = z_waitq_head(&mutex->wait_q);
+    new_prio = (waiter != NULL) ?
+                new_prio_for_inheritance(waiter->base.prio, mutex->owner_orig_prio) :
+                mutex->owner_orig_prio;
+
+    reschedule = adjust_owner_prio(mutex, new_prio) || reschedule;
+
+    if (reschedule)
+    { // If the priority change we reschedule.
+        z_reschedule(&lock, key);
+    } else {
+        k_spin_unlock(&lock, key);
+    }
+
+    return -EAGAIN;
+}
+```
+
+##### 14.5.3. Unlocking a mutex
