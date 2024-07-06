@@ -2460,3 +2460,14 @@ out:
     return ret;
 }
 ```
+
+#### 13.6. Additional details
+
+- If we initialize a semaphore to 0 with a maximum count of 1. This means that we have zero resources available and at most one resource available. If we then attempt to take it from a thread, then our thread is put to sleep on the queue. If we then give that semaphore, our pending thread is woken up and the count still remains zero.
+- If we start with the same state - semaphore at zero with maximum count of one and we then give that semaphore, then we now have one slot available. If we now try to take it then our thread instantly returns with the semaphore taken and the count is zero.
+
+#### 13.7. Best practices
+
+- **Give in one thread, take in another**: one of the best guiding factors for use of semaphore is asking the question: **Will I always take it in one thread and give it in another**? If this is not the case and you need to both take and give. as part of same sequence then it is a signal to you that you are trying to do mutual exclusion and should therefore consider a spinlock or a mutex depending on whether it should be thread aware or not. However, if you are signalling between different context/threads then the favor falls on the semaphore instead.
+- **Use for resource management**: You can use spinlock for mutual exclusion to a data variable (like a queue) and a semaphore to signal threads that there is work to be done. Thus giving a semaphore from a critical section guarded by a spinlock will defer the time when a thread will wake up in response to the semaphore until the critical section ends (i.e. spinlock is unlocked).
+- **Avoid circular dependencies**: you must avoid a scenario where two threads may end up waiting on each other's semaphores. If this happens then both threads will lock up - this situation is referred to as a `deadlock`.
