@@ -2678,3 +2678,14 @@ k_mutex_unlock_return:
     return 0;
 }
 ```
+
+#### 14.6. Best Practices
+
+- **Object oriented design**: The fastest and most sure way to ensure that it is easy for you to manage concurrent access to resources is to make each shared resource into a well defined object which can also then have a mutex as a member variable making it clear that the lock should be used by all public API functions when accessing the resource. Without object oriented design, things tend to get very messy.
+- **Lock data, not code**: Just like with spinlock, the mutex should lock only sections that access the shared resource. If possible, data should be copied to stack and the resource should be released before processing the values - provided that this does not create race conditions with other threads.
+- **Reschedule on busy in work queue items**: If you use a mutex in a work queue, it can often make sense to reschedule the work queue item instead of waiting on a locked mutex. In such a scenario, you would try to acquire the mutex using zero timeout and then if unsuccessfully, you would reschedule the work item. This ensures that your mutex does not block the whole work queue.
+
+#### 14.7. Common pitfalls
+
+- **Deadlock**: different mutex lock each other.
+- **Thread Starvation**: holding the mutex for longer than necessary causing other threads to be delayed.
