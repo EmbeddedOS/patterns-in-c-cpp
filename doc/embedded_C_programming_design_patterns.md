@@ -2327,3 +2327,17 @@ static ALWAYS_INLINE void k_spin_unlock(struct k_spinlock *l)
 - 8. Why it is wrong when compare spinlock with `thread aware` primitives?
   - spinlock pause all system don't care about thread, process, interrupt.
   - `thread aware` primitives, maybe just locking another threads, process that acquire same lock.
+
+### 13. Semaphore Pattern
+
+- Unblocking waiting threads from interrupt handler or from another thread.
+
+#### 13.1. Defining characteristic
+
+- **Give/Take**: These are two main operations on a semaphore. **Give** increments the internal counter and marks the semaphore as free. **Take** decrements the counter or queue current in semaphore's internal queue until it becomes free again.
+
+- **Maintains counter**: The semaphore is usually implemented as a counting semaphore - meaning that it can be taken multiple times without delay and then once the counter reaches zero, the semaphore will queue the calling thread until another thread gives the semaphore. For simple signalling, the semaphore usually has a count of 1 or 0 meaning that it can only be either free or taken.
+
+- **Thread aware**: The semaphore pattern is thread aware from scheduler perspective - meaning that it can instruct the OS scheduler to jump to a new piece of code when one other piece of code gives the semaphore. This is different from simple spinlock because we are now able to call `k_sem_give()` in one thread (or interrupt) and come out of `k_sem_take()` in another thread at first valid opportunity. A semaphore thus almost works like a teleport-er for our CPU core by teleport-ing it to different places in code which are market by a call to `k_sem_take()`.
+
+- **Maintains thread queue**: multiple threads can wait on same semaphore and these are maintained in a priority queue of waiting threads inside the semaphore data structure. This allows the semaphore logic to wake up the highest priority thread when a semaphore is given and the scheduler to then jump to that thread immediately. This allows multiple threads to try to lock the same semaphore without spinning in a flag like with spinlock - instead the threads are swapped out and not returned to until the semaphore is given.
