@@ -2483,3 +2483,24 @@ out:
 
 - **Condition variables**: There are more complex patterns which can be used to signal many threads at once (i.e they are all woken up before picking which one should run next).
 - **Mutexes**: This pattern is used primarily for mutually exclusive access to a resource between threads. A mutex must be given in the same thread that has acquired it - thus mutexes can not be used for signalling between threads.
+
+#### 13.10. Quiz
+
+- 1. How does the semaphore ensure that giving a semaphore in one thread, directly makes the processor end up at the end of the call to semaphore take function of the thread that is waiting for the semaphore? When does this occur and when does this not occur?
+  - Using the spinlock to lock system, set READY for first thread in queue and perform yield() to context switch.
+- 2. Why is the semaphore count not incremented if there are threads waiting for the semaphore to become available? What does the count actually represent?
+  - `count` represent the resource, we don't have to increase because we only can wake up one thread, and still have another in the queue.
+- 3. How does a semaphore differ from a spinlock?
+  - thread-aware: push current thread to sleep if semaphore is not available.
+  - spinlock disable interrupts: current thread is only thing can run on the current CPU, another CPU try to lock will be in infinite loop until the spin is unlock.
+- 4. How does a semaphore differ from a mutex? what functionality does a mutex have that the semaphore doesn't?
+  - mutex can detect deadlock, priority inversion.
+  - mutex is design for mutual exclusions -> protect critical sections.
+  - in mutex, only locking thread can unlock.
+  - Semaphore is design for resource management, can unlock, and lock from any one.
+- 5. Why should a semaphore never be used for mutual exclusion in place of a mutex?
+  - Because in case count more than 1, that can be sem_give() in some where so may many guys can access to the critical section at the same time.
+- 6. What thread will be scheduled to run first when multiple threads are waiting for a sem and the sem is given by another thread or an interrupt?
+  - Without queue priority, the first thread will be pop from queue.
+- 7. When does CPU switch to awakened thread when a semaphore is given from an interrupt handler?
+  - the waiting thread will be push to the pending task to run, so scheduler will run to it by order in the pending queue.
