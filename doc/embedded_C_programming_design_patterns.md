@@ -2740,3 +2740,110 @@ k_mutex_unlock_return:
 - **Wait**: This operation waits for the conditional to be signalled.
 - **Signal**: This operation unblocks one thread that is waiting in the queue (or is ignored if no threads are currently waiting).
 - **Broadcast**: This operation unblocks all threads that are waiting on the queue.
+
+##### 15.5.1. Usage scenario
+
+```C
+struct context {
+    struct k_mutex_lock;    // mutex for ready.
+    bool ready;             // Threads only continue when this is true.
+    struct k_condvar cv;    // conditional variable for signalling.
+}
+
+// This will be called from several threads to wait for ready.
+void wait_for_ready(struct context *self)
+{
+    k_mutex_lock(&self->lock);
+    while (!self->ready)
+    {
+        // This will atomically do the following:
+        // (1) unlock the mutex.
+        // (2) put the thread to sleep.
+        // Upon wake-up from signal:
+        // (1) lock the mutex again.
+        k_condvar_wait(&self->cv, &self->lock, TIMEOUT);
+    }
+
+    k_mutex_unlock(&self->lock);
+}
+
+// This is called from one thread once condition is ready.
+void signal_ready(struct context *self)
+{
+    k_mutex_lock(&self->lock);
+    self->ready = true;
+    k_condvar_broadcast(&self->cv);
+    k_mutex_unlock(&self->lock);
+}
+```
+
+##### 15.5.2. Waiting for events
+
+```C
+int k_condvar_wait(struct k_condvar *condvar, struct k_mutex *mutex,
+                    k_timeout_t timeout)
+{
+    k_spinlock_key_t key;
+    int ret;
+
+    key = k_spin_lock(&lock);
+
+    /* Unlock the mutex. */
+    k_mutex_unlock(mutex);
+
+    /* Push current thread to the pending queue and goto sleep. */
+    ret = z_pend_curr(&lock, key, &condvar->wait_q, timeout);
+
+    k_mutex_lock(mutex, K_FOREVER);
+}
+```
+
+##### 15.5.3. Signalling events
+
+```C
+int k_condvar_signal(struct k_condvar *condvar)
+{
+    k_spinlock_key_t key = k_spin_lock(&lock);
+
+    /* Pop one thread from the queue to signal. */
+    struct k_thread *thread = z_unpend_first_thread(&condvar->wait_q);
+    if (thread != NULL)
+    {
+        arch_thread_return_value_set(thread, 0);
+        z_ready_thread(thread); // Make it ready.
+        z_reschedule(&lock, key); // Re-schedule.
+    }
+    else
+    {
+        k_spin_unlock(&lock, key);
+    }
+
+    return 0;
+}
+```
+
+##### 15.5.4. Broadcasting events
+
+```C
+int k_condvar_broadcast(struct k_condvar *condvar)
+{
+    struct k_thread *pending_thread;
+    k_spinlock_key_t key;
+
+    int woken = 0;
+
+    key = k_spin_lock(&lock);
+
+    /* Wake up any threads that are waiting to write. */
+    while ((pending_thread = z_unpend_first_thread(&condvar->wait_q)) != NULL)
+    {
+        woken++;
+        arch_thread_return_value_set(pending_thread, 0);
+        z_ready_thread(pending_thread);
+    }
+
+    z_reschedule(&lock, key);
+
+    return woken;
+}
+```
