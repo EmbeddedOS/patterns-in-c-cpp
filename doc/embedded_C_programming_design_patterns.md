@@ -2847,3 +2847,33 @@ int k_condvar_broadcast(struct k_condvar *condvar)
     return woken;
 }
 ```
+
+#### 15.6. Best practices
+
+- **Use sparingly**: Only use conditional variable when you need to either signal threads from an interrupt with additional data that must have mutual exclusion protection between threads or you explicitly need to wake up several threads at once. Usually you can accomplish the signalling with a semaphore in a much more lightweight fashion.
+- **Always check in a loop**: When you are checking for the condition, make sure to do it in a loop where you repeatedly wait on the conditional variable if the condition you expect is not met. Code can evolve in such a way that your conditional variable is signaled even when your expected condition is not met and your code needs to continue to work correctly even when that is the case.
+
+#### 15.7. Common pitfalls
+
+- **Spurious wake-ups**: even if it looks to you like the condition variable is only signalled when you expected condition is met, it may still be signalled sporadically due to other reasons. On Linux such other reasons could be a signal received by the process which requires the system call to be restarted. This is mitigated by always checking the expected condition in a loop.
+
+#### 15.8. Alternatives
+
+- **Semaphore**: A semaphore can be used to signal an event to one thread at a time. but Semaphore don't have the same implementation guarantees like conditional variable, the mutex that is link with conditional variable make sure every condition is protected also.
+- **Work queue**: it is possible to check a condition by submitting a work queue item and call back listener when condition is ready.
+- **Event bus**: multiple thread can subscribe to an topic, and when the event come, event bus will broadcasted to all subscriber.
+
+#### 15.9. Quiz
+
+- 1. Can a condition variable be signaled from an interrupt handler?
+  - Yes, in signal() implementation, it's don't access mutex, and simply pop task from queue, make it ready and return.
+- 2. When a conditional variable `broadcast` method is used, at what point do all the threads wake-up and in what order do they continue after that if there is only one CPu?
+  - We just mark threads like ready and after that reschedule for all, let scheduler do it job. If the priority is equal, we push to ready queue one by one, That means the oldest is running first.
+- 3. If there are multiple CPUs and broadcast is used, to signal a conditional var, can a thread be swapped in and start running before all threads have been woken up?
+  - No, we use spinlock to make sure all CPU cannot re-schedule threads at that time.
+- 4. What is the main difference bw a conditional var and semaphore?
+  - broadcast. And make sure the mutex is locked when the caller thread running and unlock when it's sleeping.
+- 5. If multiple threads are waiting on a conditional var, which one will be chosen to run first if the conditional var is signalled?
+  - First thread in pending queue.
+- 6. Why is it always important to check condition var in loop, even if you know that you are only signalling when the desired condition is true?
+  - Because some time the system can wake by another signals (Linux system, using system call to be restarted) or many various reasons (timeout).
