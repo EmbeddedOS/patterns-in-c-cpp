@@ -2729,3 +2729,14 @@ k_mutex_unlock_return:
 - **Arbitrary conditions**: This pattern allows checking for arbitrary set of conditions to be true. With mutex and semaphore we can only check for a resource to be available or not. With conditional variables we can introduce arbitrary checks info the mix and perform these checks safety through the use of mutual exclusion against other threads using the accompanying mutex.
 - **Mutex unlocked while waiting**: Another valuable benefit of a conditional variable is that the synchronization mutex is kept in unlocked state while waiting for signal through the condition variable. This allows the mutex to be acquired and released by other threads while the waiting thread sleeps. Once it's time to wake-up, the conditional variable makes sure that the mutex is locked again before the waiting thread checks the condition again. Thus to the waiting thread it looks like it had the mutex locked at all times even though the mutex was unlocked while it was asleep.
 - **Can be signaled from interrupt handler**: Conditional variables can be signaled from interrupt handlers - although you can not wait for a conditional variable inside an interrupt handler for obvious reasons.
+
+#### 15.4. Drawbacks
+
+- **Complexity**: A conditional variable must always be checked in a loop and you must follow a few specific rules when waiting for a condition to occur such as always checking condition with the guarding mutex locked and remembering to unlock the mutex.
+- **Memory**: Waiting for a conditional variable always requires one mutex per thread that will be waiting concurrently. This alls additional memory requirements.
+
+#### 15.5. Implementation
+
+- **Wait**: This operation waits for the conditional to be signalled.
+- **Signal**: This operation unblocks one thread that is waiting in the queue (or is ignored if no threads are currently waiting).
+- **Broadcast**: This operation unblocks all threads that are waiting on the queue.
