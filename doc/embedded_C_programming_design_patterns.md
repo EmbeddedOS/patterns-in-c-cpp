@@ -2706,3 +2706,26 @@ k_mutex_unlock_return:
   - It's will be run in the next schedule.
 - 4. If multiple mutexes are locked/unlocked, in what sequence should these mutexes be locked/unlocked to avoid deadlock?
   - Don't lock another mutex when you are locking other one.
+
+### 15. Conditional Pattern
+
+- Ability to wake up multiple threads at once in response to change in conditions.
+
+#### 15.1. Defining characteristics
+
+- **Wait/signal/Broadcast**: These are three main operations that can be performed on a conditional variable. **Wait** is executed by the waiting thread, **Signal** unblocks one thread, **Broadcast** unblocks all threads waiting.
+- **Mutex protection**: A condition variable is always used in conjunction with a mutex. When a thread is waiting on a conditional variable, it releases the lock, and when the condition is met and conditional variable is signalled, the thread re-acquires the lock and continues execution with the mutex locked.
+- **Simultaneous wake-up**: A condition variable can be used to `broadcast` the condition to multiple threads waiting for condition to be met. This is different from semaphore and mutex where only one thread is picked from the wait queue in that all the waiting threads can be marked as ready before a reschedule is triggered. In such a scenario the threads always proceed in sequence of priority and sometimes in parallel depending on how many CPU cores are available.
+- **Checked in a loop**: The condition which is signalled through the condition variable is typically checked in a loop. This is because the conditional variable can be used to wake up the main thread for multiple different conditions and it is up to the thread waiting on the conditional variable to check exactly which condition has been met.
+
+#### 15.2. Use cases
+
+- **Signaling multiple threads**: The conditional variable is used to wake up one or more threads when a condition is met. The mutual exclusion to all user data belonging to the condition is guarded by the mutex that is used in conjunction with the condition variable.
+- **Waiting for a set of multiple complex conditions to occur**: The conditional variable enables thread safe checking of multiple potentially complex conditions to be met before proceeding. Multiple checks can be performed safety with the mutex locked and the thread can wait for the condition variable signal with the mutex unlocked - allowing other threads to perform operations that use the same mutex while the current thread is waiting for the condition to be met.
+- **Producer-consumer pattern**: The condition variable can be used in order to repeatedly wake-up a consumer thread when a new item is added by the producer. The consumer thread can then decide whether to consume the item direct or whether to wait for complimentary information before consuming an item. Conditional variables enable this kind of flexibility.
+
+#### 15.3. Use cases
+
+- **Arbitrary conditions**: This pattern allows checking for arbitrary set of conditions to be true. With mutex and semaphore we can only check for a resource to be available or not. With conditional variables we can introduce arbitrary checks info the mix and perform these checks safety through the use of mutual exclusion against other threads using the accompanying mutex.
+- **Mutex unlocked while waiting**: Another valuable benefit of a conditional variable is that the synchronization mutex is kept in unlocked state while waiting for signal through the condition variable. This allows the mutex to be acquired and released by other threads while the waiting thread sleeps. Once it's time to wake-up, the conditional variable makes sure that the mutex is locked again before the waiting thread checks the condition again. Thus to the waiting thread it looks like it had the mutex locked at all times even though the mutex was unlocked while it was asleep.
+- **Can be signaled from interrupt handler**: Conditional variables can be signaled from interrupt handlers - although you can not wait for a conditional variable inside an interrupt handler for obvious reasons.
